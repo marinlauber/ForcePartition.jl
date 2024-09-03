@@ -2,20 +2,15 @@ using WaterLily
 using StaticArrays
 using LinearAlgebra: tr
 
-Base.copy(b::AutoBody) = AutoBody(b.sdf,b.map)
 struct ForcePartitionMethod{T,Sf<:AbstractArray{T},Vf<:AbstractArray{T}}
     ϕ :: Sf
     σ :: Sf
     f :: Vf
     pois::AbstractPoisson
     body::AbstractBody
-    function ForcePartitionMethod(sim::Simulation)
-        T = eltype(sim.flow.u)
-        ϕ = copy(sim.flow.p)
-        σ = copy(sim.flow.σ)
-        f = copy(sim.flow.f)
-        body = copy(sim.body)
-        new{T,typeof(ϕ),typeof(f)}(ϕ,σ,f,Poisson(ϕ,sim.flow.μ₀,σ),body)
+    function ForcePartitionMethod(sim::Simulation,solver=Poisson)
+        ϕ,σ,f = copy(sim.flow.p),copy(sim.flow.σ),copy(sim.flow.f)
+        new{eltype(sim.flow.u),typeof(ϕ),typeof(f)}(ϕ,σ,f,solver(ϕ,sim.flow.μ₀,σ),sim.body)
     end
 end
 
@@ -23,17 +18,23 @@ end
     Compute the the influence potential of the body at time tᵢ 
 """
 # #@TODO check that updating the body updates the poisson coefficients of the FPM
-function potential!(FPM::ForcePartitionMethod,tᵢ=0;axis=1)
-    # the boundary value is the surface normal
-    function normal(x,i)
-        dᵢ,nᵢ,_ = measure(FPM.body,x,tᵢ)
-        μ₀ = WaterLily.μ₀(dᵢ,1)
-        (1.0-μ₀)*nᵢ[i] # i-component of the normal
-    end
+function potential!(FPM::ForcePartitionMethod;x₀=SA[0.,0.],f::Symbol=:force,tᵢ=0,axis=1,tol=1e-5,itmx=1e4)
     # generate source term
-    apply!(x->normal(x,axis),FPM.pois.z); BC!(FPM.pois.z)
+    apply!(x->eval(f)(FPM.body,x,x₀,axis,tᵢ),FPM.pois.z); BC!(FPM.pois.z)
     # solver for potential
-    solver!(FPM.pois); BC!(FPM.ϕ)
+    solver!(FPM.pois;itmx=itmx,tol=tol); BC!(FPM.ϕ)
+end
+
+# the boundary value is the surface normal
+function force(body,x,x₀,i,tᵢ)
+    dᵢ,nᵢ,_ = measure(body,x,tᵢ)
+    WaterLily.kern(clamp(dᵢ,-1,1))*nᵢ[i] # i-component of the normal
+end
+cross(a,b) = a[1]*b[2]-a[2]*b[1]
+# the boundary value is the surface normal
+function moment(body,x,x₀,i,tᵢ) # the axis here does not matter
+    dᵢ,nᵢ,_ = measure(body,x,tᵢ)
+    WaterLily.kern(clamp(dᵢ,-1,1))*cross((x-x₀),nᵢ) # the normal moment
 end
 
 function Qcriterion(I::CartesianIndex{2},u)
@@ -42,12 +43,49 @@ function Qcriterion(I::CartesianIndex{2},u)
     ## -0.5*sum(eigvals(S^2+Ω^2)) # this is also possible, but 2x slower
     0.5*(√(tr(Ω*Ω'))^2-√(tr(S*S'))^2)
 end
+function Qcriterion(I::CartesianIndex{3},u)
+    J = @SMatrix [WaterLily.∂(i,j,I,u) for i ∈ 1:3, j ∈ 1:3]
+    S,Ω = (J+J')/2,(J-J')/2
+    ## -0.5*sum(eigvals(S^2+Ω^2)) # this is also possible, but 2x slower
+    0.5*(√(tr(Ω*Ω'))^2-√(tr(S*S'))^2)
+end
 
-function ∫2Qϕ!(FPM::ForcePartitionMethod,a::Flow,tᵢ=0;axis=1,recompute=true)
+function ∫2Qϕ!(FPM::ForcePartitionMethod,a::Flow,tᵢ=0;axis=1,recompute=true,f::Symbol=:force)
     # get potential
-    recompute && potential!(FPM,tᵢ;axis=axis)
+    recompute && potential!(FPM;f=f,tᵢ=tᵢ,axis=axis)
     # compute the influence of the Q field
     @WaterLily.loop FPM.σ[I] = FPM.ϕ[I]*Qcriterion(I,a.u) over I ∈ inside(FPM.σ)
     # return the integral over the doman
+    2sum(@inbounds(FPM.σ[inside(FPM.σ)]))
+end
+
+function ∮Ubϕ!(FPM::ForcePartitionMethod,a::Flow,tᵢ=0;axis=1,recompute=true,f::Symbol=:force)
+    # get potential
+    recompute && potential!(FPM;f=f,tᵢ=tᵢ,axis=axis)
+    # compute the influence of kinematics
+    @WaterLily.loop FPM.σ[I] = FPM.ϕ[I]*Unds(I,FPM.body,tᵢ) over I ∈ inside(FPM.σ)
+    # return the integral over the doman
     sum(@inbounds(FPM.σ[inside(FPM.σ)]))
+end
+@inline function Unds(I,body,tᵢ)
+    d,nᵢ,vᵢ = measure(body,loc(0,I),tᵢ)
+    sum(nᵢ.*vᵢ)*WaterLily.kern(clamp(d,-1,1))
+end
+
+function ∮ReωdS!(FPM::ForcePartitionMethod,a::Flow,tᵢ=0;axis=1,recompute=true,f::Symbol=:force)
+    # get potential
+    recompute && potential!(FPM;f=f,tᵢ=tᵢ,axis=axis)
+    # compute the vorticity × normal 
+    for i ∈ 1:2
+        @WaterLily.loop FPM.f[I,i] = ωxn(i,I,a.u,body,tᵢ)*WaterLily.∂(i,I,FPM.ϕ) over I ∈ inside(FPM.σ)
+    end
+    # compute the influence of the Q field
+    @WaterLily.loop FPM.σ[I] = FPM.ϕ[I]*Unds(I,FPM.body,tᵢ) over I ∈ inside(FPM.σ)
+
+end
+
+function ωxn(i,I,u,body,tᵢ)
+    d,n,_ = measure(body,loc(i,I),tᵢ)
+    ω = WaterLily.curl(i,I,u)
+    -sign(2-i)*ω*n[i%2+1]*WaterLily.kern(clamp(d,-1,1))
 end

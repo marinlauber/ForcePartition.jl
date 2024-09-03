@@ -5,6 +5,7 @@ version = "1.0.0-DEV"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+ParametricBodies = "06905c2e-4b4a-4765-8bb9-c6b6b2b99b1d"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 WaterLily = "ed894a53-35f9-47f1-b17f-85db9237eebd"
 
