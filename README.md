@@ -92,3 +92,9 @@ TBF
 #### 3D flow around a sphere
 
 ![sphere](examples/force_partition_sphere.png)
+
+#### 3D flow around a mosquito wing
+
+The file to replicate this case in the examples folder is [here](examples/ThreeD_Dickinson.jl)
+
+![mosquito](examples/force_partition_mosquito.png)

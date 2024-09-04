@@ -17,14 +17,13 @@ end
 """
     Compute the the influence potential of the body at time tᵢ 
 """
-# #@TODO check that updating the body updates the poisson coefficients of the FPM
-function potential!(FPM::ForcePartitionMethod;x₀=SA[0.,0.],f::Symbol=:force,tᵢ=0,axis=1,tol=1e-5,itmx=1e4)
+function potential!(FPM::ForcePartitionMethod{T};x₀=0,tᵢ=0,axis=1,tol=1e-4,itmx=32) where T
     # first we need to save the pressure field
     @inside FPM.σ[I] = FPM.pois.x[I]
     # generate source term
-    apply!(x->eval(f)(FPM.body,x,x₀,axis,tᵢ),FPM.pois.z)
+    @WaterLily.loop FPM.pois.z[I] = force(FPM.body,loc(0,I,T),x₀,axis,tᵢ) over I ∈ CartesianIndices(FPM.pois.z)
     # solver for potential
-    solver!(FPM.pois;itmx=itmx,tol=tol)
+    solver!(FPM.pois) # keep the tol the same as the pressure
     # copy to the FPM
     @inside FPM.ϕ[I] = FPM.pois.x[I]
     @inside FPM.pois.x[I] = FPM.σ[I] # put back pressure field
@@ -39,7 +38,7 @@ cross(a::SVector{2},b::SVector{2}) = a[1]*b[2]-a[2]*b[1]
 # the boundary value is the surface normal
 function moment(body,x,x₀,i,tᵢ) # the axis here does not matter
     dᵢ,nᵢ,_ = measure(body,x,tᵢ)
-    WaterLily.kern(clamp(dᵢ,-1,1))*cross((x-x₀),nᵢ) # the normal moment
+    WaterLily.kern(clamp(dᵢ,-1,1))*cross((x.-x₀),nᵢ) # the normal moment
 end
 
 function Qcriterion(I::CartesianIndex{2},u)
@@ -55,9 +54,9 @@ function Qcriterion(I::CartesianIndex{3},u)
     0.5*(√(tr(Ω*Ω'))^2-√(tr(S*S'))^2)
 end
 
-function ∫2Qϕ!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);axis=1,recompute=true,f::Symbol=:force)
+function ∫2Qϕ!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);axis=1,recompute=true)
     # get potential
-    recompute && potential!(FPM;f=f,tᵢ=tᵢ,axis=axis)
+    recompute && potential!(FPM;tᵢ=tᵢ,axis=axis)
     # compute the influence of the Q field
     @WaterLily.loop FPM.σ[I] = FPM.ϕ[I]*Qcriterion(I,a.u) over I ∈ inside(FPM.σ)
     # return the integral over the doman
