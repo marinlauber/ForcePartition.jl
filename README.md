@@ -31,7 +31,9 @@ In the code, generating a force/moment partition is done by first creating a `Fo
 ```julia
 fpm = ForcePartitionMethod(sim,:moment,x₀=SA[0.,0.])
 ```
-where `sim` is a `Waterlily.Simulation` object that holds the flow field and the geometry of the body. The `:moment` argument specifies that the object is to be used for the computation of moments (similarly, $:force$) would generate a force partition structure. The `x₀` argument specifies the origin of the coordinate system in which the moments are computed (for forces, this is irrelevant).
+where `sim` is a `WaterLily.Simulation` object that holds the flow field and the geometry of the body. The `:moment` argument specifies that the object is to be used for the computation of moments (similarly, $:force$) would generate a force partition structure. The `x₀` argument specifies the origin of the coordinate system in which the moments are computed (for forces, this is irrelevant).
+
+> **_NOTE:_** If you just want to use this library to compute the influence field, you will need to generate a dummy WaterLily simulation object with the flow field and the geometry of the body. This is because the influence field is computed by solving a Poisson equation with the boundary conditions specified by the geometry of the body and using the Poisson solver from WaterLily. 
 
 #### Vorticity-induced component
 
@@ -55,3 +57,19 @@ the `recompute` argument specifies whether the influence field should be recompu
 ### Examples
 
 The examples shown here replicate the examples presented in the paper by [K. Menon and R. Mittal](https://doi.org/10.1016/j.jcp.2021.110515). The examples are:
+
+#### 2D flow around a cylinder
+
+This is the classical flow around a 2D cylinder. The example file can be found [here](examples/cylinder.jl) 
+
+![cylinder](examples/cylinder.gif)
+
+The result of the force partition is shown below, we comapre the total pressure force acting on the cylinder with the vorticity component of the force. The total force is computed by integrating the pressure field over the surface of the cylinder, while the vorticity component is computed by the force partition method. The results are shown below
+
+![fp_cylinder](examples/force_partition.png)
+
+#### 2D flow around a pitching airfoil
+
+TBF
+
+![cylinder](examples/airfoil.gif)
