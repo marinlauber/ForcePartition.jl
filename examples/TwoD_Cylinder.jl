@@ -86,7 +86,7 @@ force, fp = [],[]
     # plot vorticity
     @inside sim.flow.σ[I] = WaterLily.curl(3,I,sim.flow.u)*sim.L/sim.U
     @inside sim.flow.σ[I] = ifelse(abs(sim.flow.σ[I])<0.001,0.0,sim.flow.σ[I])
-    flood(sim.flow.σ; levels=21, shift=(-0.5,-0.5),clims=(-5,5))
+    flood(sim.flow.σ; levels=20, shift=(-0.5,-0.5),clims=(-5,5))
     body_plot!(sim); plot!(title="tU/L $tᵢ")
 
     # print time step

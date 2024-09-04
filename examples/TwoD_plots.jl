@@ -20,7 +20,7 @@ function body_plot!(sim;levels=[0],lines=:black,R=inside(sim.flow.p))
 end
 
 function sim_gif!(sim;duration=1,step=0.1,verbose=true,R=inside(sim.flow.p),
-                    remeasure=false,plotbody=false,kv...)
+                    remeasure=false,plotbody=false,title=false,kv...)
     t₀ = round(sim_time(sim))
     @time @gif for tᵢ in range(t₀,t₀+duration;step)
         sim_step!(sim,tᵢ;remeasure)
@@ -28,6 +28,7 @@ function sim_gif!(sim;duration=1,step=0.1,verbose=true,R=inside(sim.flow.p),
         @inside sim.flow.σ[I] = ifelse(abs(sim.flow.σ[I])<0.001,0.0,sim.flow.σ[I])
         flood(sim.flow.σ[R]|>Array; kv...)
         plotbody && body_plot!(sim)
+        title && plot!(title="tU/L $tᵢ")
         verbose && println("tU/L=",round(tᵢ,digits=4),
             ", Δt=",round(sim.flow.Δt[end],digits=3))
     end

@@ -30,7 +30,7 @@ sim = make_airfoil(L=32)
 
 # evolve the simulation
 sim_gif!(sim;duration=20,step=0.2,verbose=true,
-         clims=(-5,5),plotbody=true,remeasure=true)
+         clims=(-10,10),plotbody=true,remeasure=true,title=true)
 
 # # run a sim and plot the time evolution
 # sim = make_circle(L=32)
