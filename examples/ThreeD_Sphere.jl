@@ -3,13 +3,10 @@ using Plots
 using StaticArrays
 using ForcePartition
 using ParametricBodies
-using BiotSavartBCs
 include("TwoD_plots.jl")
 
 function make_sphere(;L=32,Re=250,U=1)
-    radius, center = L/2, 2L
-    center = SA[center,center,center]
-
+    radius, center = L/2, SA[2L,2L,2L]
     # make a body
     sphere = AutoBody((x,t)->√sum(abs2, x .- center .- 1.5) - radius)
 
@@ -17,30 +14,45 @@ function make_sphere(;L=32,Re=250,U=1)
     Simulation((8L,4L,4L), (U,0,0), radius; ν=U*radius/Re, body=sphere)
 end
 
-# make simulation
-sim = make_sphere(L=32)
+# # make simulation
+# sim = make_sphere(L=32)
 
-# contruct FPM and compute potential
-fpm = ForcePartitionMethod(sim)
-potential!(fpm;tᵢ=0,f=:force,axis=1,itmx=32)
+# # contruct FPM and compute potential
+# fpm = ForcePartitionMethod(sim)
+# potential!(fpm;tᵢ=0,f=:force,axis=1,itmx=32)
 
-# evolve the simulation
-sim_step!(sim,1)
-@inside sim.flow.σ[I] = WaterLily.curl(3,I,sim.flow.u)*sim.L/sim.U
-flood(sim.flow.σ[:,:,2sim.L],clims=(-5,5))
+# # evolve the simulation
+# sim_step!(sim,1)
+# @inside sim.flow.σ[I] = WaterLily.curl(2,I,sim.flow.u)*sim.L/sim.U
+# flood(sim.flow.σ[:,:,64],clims=(-5,5))
 
-# qfield influence
-qϕ = -∫2Qϕ!(fpm,sim.flow,20.0,recompute=false)
-# total force
-force = -WaterLily.pressure_force(sim)
+# # check the influence field
+# contourf(fpm.ϕ[:,:,64]',aspect_ratio=:equal,cmap=:seismic)
+# contourf(fpm.ϕ[:,64,:]',aspect_ratio=:equal,cmap=:seismic)
+
+# # gradient should be similar to potential flow solution, except the frame of refernce we are in
+# @inside sim.flow.σ[I] = 1-WaterLily.∂(1,I,fpm.ϕ)
+# @inside sim.flow.σ[I] = ifelse(sdf(sim.body,loc(0,I),0)<0.01,NaN,sim.flow.σ[I])
+# p1 = contourf(sim.flow.σ[:,:,64]',clims=(0,2),aspect_ratio=:equal,levels=11,filled=true,frame=:none,title="U-velocity")
+
+# @inside sim.flow.σ[I] = -WaterLily.∂(2,I,fpm.ϕ) 
+# @inside sim.flow.σ[I] = ifelse(sdf(sim.body,loc(0,I),0)<0.01,NaN,sim.flow.σ[I])
+# p2 = contourf(sim.flow.σ[:,:,64]',clims=(-1,1),aspect_ratio=:equal,levels=11,filled=true,frame=:none,title="V-velocity")
+# plot(p1,p2, layout = @layout [a b])
+
+# # qfield influence
+# qϕ = -∫2Qϕ!(fpm,sim.flow,recompute=false)
+# # total force
+# force = -WaterLily.pressure_force(sim)
 
 # run a sim and plot the time evolution
 sim = make_sphere(L=32)
 fpm = ForcePartitionMethod(sim)
+potential!(fpm;tᵢ=0,f=:force,axis=1,itmx=32)
 t₀,duration,step = 0.,10,0.2
 force, fp = [],[]
 
-@time @gif for tᵢ in range(t₀,t₀+duration;step)
+@time for tᵢ in range(t₀,t₀+duration;step)
     # update until time tᵢ in the background
     while sim_time(sim) < tᵢ
         # update flow
@@ -50,15 +62,12 @@ force, fp = [],[]
         push!(fp,-∫2Qϕ!(fpm,sim.flow,recompute=false))
     end
 
-    # plot vorticity
-    @inside sim.flow.σ[I] = WaterLily.curl(3,I,sim.flow.u)*sim.L/sim.U
-    flood(sim.flow.σ; shift=(-0.5,-0.5),clims=(-5,5))
-    body_plot!(sim); plot!(title="tU/L $tᵢ")
-
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
 end
 
 # # plot results
-# plot(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,force,label="-2∫pndS",xlabel="tU/L",ylabel="Force")
-# plot!(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,fp,label="-2∫QϕdV")
+# plot(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,force/sim.L^2,label="Total force",
+#      xlabel="tU/L",ylabel="2F/ρU²L",ylims=(0,2),xlims=(0,10))
+# plot!(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,fp/sim.L^2,label="vorticity force")
+# savefig("force_partition_sphere.png")

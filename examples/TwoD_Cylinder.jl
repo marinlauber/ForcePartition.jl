@@ -1,9 +1,7 @@
 using WaterLily
-using Plots
 using StaticArrays
 using ForcePartition
 using ParametricBodies
-using BiotSavartBCs
 include("TwoD_plots.jl")
 
 function make_circle(;L=32,Re=250,U=1)

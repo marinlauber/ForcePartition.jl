@@ -88,3 +88,7 @@ The result of the force partition is shown below, we comapre the total pressure 
 TBF
 
 ![cylinder](examples/airfoil.gif)
+
+#### 3D flow around a sphere
+
+![sphere](examples/force_partition_sphere.png)

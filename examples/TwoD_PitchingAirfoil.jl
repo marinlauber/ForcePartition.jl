@@ -1,9 +1,7 @@
 using WaterLily
-using Plots
 using StaticArrays
 using ForcePartition
 using ParametricBodies
-using BiotSavartBCs
 include("TwoD_plots.jl")
 
 function make_airfoil(;L=32,Re=1000,St=0.25,αₘ=25,U=1,n=16,m=8,T=Float32,mem=Array)
