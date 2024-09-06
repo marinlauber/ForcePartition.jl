@@ -59,7 +59,7 @@ force, fp = [],[]
         mom_step!(sim.flow,sim.pois)
         # pressure force
         push!(force,-2WaterLily.pressure_force(sim)[1])
-        push!(fp,-∫2Qϕ!(fpm,sim.flow,recompute=false))
+        push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=false))
     end
 
     # print time step

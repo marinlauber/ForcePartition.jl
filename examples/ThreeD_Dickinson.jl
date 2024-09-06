@@ -101,7 +101,7 @@ forces,fp = [],[] # empty list to store forces
         # to find the actual force we have Fi = Ci/(1/2*ρ*U^2*L^2)
         force = -2WaterLily.pressure_force(sim)/sim.L^2
         push!(forces,[t/sim.L,force...])
-        push!(fp,-∫2Qϕ!(fpm,sim.flow,recompute=true))
+        push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=true))
     end
     # this writes every tstep to paraview files, not every time step
     # write!(writer,sim);

@@ -24,9 +24,6 @@ struct ForcePartitionMethod{T,Sf<:AbstractArray{T},Vf<:AbstractArray{T}}
     end
 end
 
-test(a,::Val{:force}) = println("force")
-test(a,::Val{:moment}) = println("moment")
-func(a,f::Symbol=:force) = test(a,Val(f))
 """
     potential!(FPM::ForcePartitionMethod;axis,tᵢ,f::Symbol=:force)
 
@@ -63,40 +60,38 @@ end
 """
 function source(body,x,x₀,i,tᵢ,::Val{:moment}) # the axis here does not matter
     dᵢ,nᵢ,_ = measure(body,x,tᵢ)
-    WaterLily.kern(clamp(dᵢ,-1,1))*cross((x.-x₀),nᵢ) # the normal moment
+    WaterLily.kern(clamp(dᵢ,-1,1))*cross(i,(x.-x₀),nᵢ) # the normal moment
 end
-cross(a::SVector{2},b::SVector{2}) = a[1]*b[2]-a[2]*b[1]
+cross(i,a::SVector{2},b::SVector{2}) = a[1]*b[2]-a[2]*b[1]
+cross(i,a::SVector{3},b::SVector{3}) = (j=i%3+1;k=(i+1)%3+1;a[j]*b[k]-a[k]*b[j])
 
 """
     Qcriterion(I::CartesianIndex,u)
     
     Compute the Q-criterionfor 2D and 3D velocity fields
 """
-function Qcriterion(I::CartesianIndex{2},u)
-    J = @SMatrix [WaterLily.∂(i,j,I,u) for i ∈ 1:2, j ∈ 1:2]
+function Qcriterion(I,u)
+    J = ∇u(I,u)
     S,Ω = (J+J')/2,(J-J')/2
-    ## -0.5*sum(eigvals(S^2+Ω^2)) # this is also possible, but 2x slower
     0.5*(√(tr(Ω*Ω'))^2-√(tr(S*S'))^2)
 end
-function Qcriterion(I::CartesianIndex{3},u)
-    J = @SMatrix [WaterLily.∂(i,j,I,u) for i ∈ 1:3, j ∈ 1:3]
-    S,Ω = (J+J')/2,(J-J')/2
-    ## -0.5*sum(eigvals(S^2+Ω^2)) # this is also possible, but 2x slower
-    0.5*(√(tr(Ω*Ω'))^2-√(tr(S*S'))^2)
-end
+∇u(I::CartesianIndex{2},u) = @SMatrix [WaterLily.∂(i,j,I,u) for i ∈ 1:2, j ∈ 1:2]
+∇u(I::CartesianIndex{3},u) = @SMatrix [WaterLily.∂(i,j,I,u) for i ∈ 1:3, j ∈ 1:3]
 
 """
     ∫2Qϕ!(::ForcePartitionMethod,::Flow,tᵢ,i,recompute=true)
     
     Compute the vorticity influence on the ith component of the force 
-    on the body at a time tᵢ.
+    on the body at a time tᵢ. By specifying the `type` as `:moment` the 
+    influence on the moment is computed.
     - FPM: ForcePartitionMethod
     - a: Flow
     - tᵢ: time, the default is the current time
     - i: component of the force
     - recompute: if true, the potential is recomputed (needed for moving geometries)
+    - type: :force or :moment
 """
-function ∫2Qϕ!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);axis=1,recompute=true,type::Symbol=:force)
+function ∫2QϕdV!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);axis=1,recompute=true,type::Symbol=:force)
     # get potential
     recompute && potential!(FPM;type=type,tᵢ=tᵢ,axis=axis)
     # compute the influence of the Q field
@@ -105,6 +100,18 @@ function ∫2Qϕ!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);axis=
     2sum(@inbounds(FPM.σ[inside(FPM.σ)]))
 end
 
+"""
+    ∮UϕdS!(::ForcePartitionMethod,::Flow,tᵢ,i,recompute=true,type=:force)
+
+    Compute the kinematic influence on the `ith` component of the force. By specifying
+    the `type` as `:moment` the influence on the moment is computed.
+    - FPM: ForcePartitionMethod
+    - a: Flow
+    - tᵢ: time, the default is the current time
+    - i: component of the force
+    - recompute: if true, the potential is recomputed (needed for moving geometries)
+    - type: :force or :moment
+"""
 function ∮UϕdS!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);axis=1,recompute=true,type::Symbol=:force)
     # get potential
     recompute && potential!(FPM;type=type,tᵢ=tᵢ,axis=axis)
@@ -119,7 +126,12 @@ using ForwardDiff: derivative
     aᵢ = derivative(tᵢ->derivative(tᵢ->body.map(loc(0,I),tᵢ),tᵢ),tᵢ)
     sum(nᵢ.*aᵢ)*WaterLily.kern(clamp(d,-1,1))
 end
+"""
+    ∮ReωdS!(::ForcePartitionMethod,::Flow,tᵢ,i,recompute=true,type=:force)
 
+    Compute the viscous influence on the `ith` component of the force. By specifying
+    the `type` as `:moment` the influence on the moment is computed.
+"""
 function ∮ReωdS!(FPM::ForcePartitionMethod{T},a::Flow{D},tᵢ=WaterLily.time(a);
                  axis=1,recompute=true,type::Symbol=:force) where {T,D}
     # get potential
@@ -132,10 +144,9 @@ function ∮ReωdS!(FPM::ForcePartitionMethod{T},a::Flow{D},tᵢ=WaterLily.time(
 end
 ∇ϕ(I::CartesianIndex{2},ϕ) = @SVector[WaterLily.∂(i,I,ϕ) for i ∈ 1:2]
 ∇ϕ(I::CartesianIndex{3},ϕ) = @SVector[WaterLily.∂(i,I,ϕ) for i ∈ 1:3]
-# @TODO vorticity at the cell center
 function ωxn(I::CartesianIndex{2},u,body,tᵢ)
     d,n,_ = measure(body,loc(0,I),tᵢ)
-    ω = WaterLily.curl(3,I,u) # this one is NOT at cell center
+    ω = WaterLily.∂(2,1,I,u)-WaterLily.∂(1,2,I,u) # at cell center
     SA[-ω*n[2],ω*n[1]]*WaterLily.kern(clamp(d,-1,1))
 end
 function ωxn(I,u,body,tᵢ)

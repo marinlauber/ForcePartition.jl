@@ -44,7 +44,7 @@ force, fp = [],[]
         measure!(sim); mom_step!(sim.flow,sim.pois)
         # pressure force
         push!(force,-2pressure_force(sim)[1])
-        push!(fp,-∫2Qϕ!(fpm,sim.flow,recompute=true))
+        push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=true))
     end
 
     # plot vorticity
