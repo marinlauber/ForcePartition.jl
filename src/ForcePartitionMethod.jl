@@ -46,7 +46,7 @@ end
     force(body,x₀,i,tᵢ,::Val{:force})
     
     Compute the the source term for the force influence potential
-    of the body at time tᵢ
+    of the body at time tᵢ.
 """
 function source(body,x,x₀,i,tᵢ,::Val{:force})
     dᵢ,nᵢ,_ = measure(body,x,tᵢ)
@@ -56,7 +56,7 @@ end
     moment(body,x,x₀,i,tᵢ,::Val{:moment})
 
     Compute the the source term for the moment influence potential
-    of the body at time tᵢ
+    of the body at time tᵢ aroudn point x₀.
 """
 function source(body,x,x₀,i,tᵢ,::Val{:moment}) # the axis here does not matter
     dᵢ,nᵢ,_ = measure(body,x,tᵢ)
@@ -68,7 +68,7 @@ cross(i,a::SVector{3},b::SVector{3}) = (j=i%3+1;k=(i+1)%3+1;a[j]*b[k]-a[k]*b[j])
 """
     Qcriterion(I::CartesianIndex,u)
     
-    Compute the Q-criterionfor 2D and 3D velocity fields
+    Compute the Q-criterion for a 2D/3D velocity field
 """
 function Qcriterion(I,u)
     J = ∇u(I,u)
