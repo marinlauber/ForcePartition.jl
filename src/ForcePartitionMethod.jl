@@ -25,16 +25,20 @@ struct ForcePartitionMethod{T,Sf<:AbstractArray{T},Vf<:AbstractArray{T}}
 end
 
 """
-    potential!(FPM::ForcePartitionMethod;axis,tᵢ,f::Symbol=:force)
+    potential!(FPM::ForcePartitionMethod;axis,tᵢ)
 
     Compute the the influence potential of the body at time tᵢ for either 
     the `:force` or the `:moment`.
 """
-function potential!(FPM::ForcePartitionMethod{T};x₀=0,tᵢ=0,axis=1,type::Symbol=:force) where T
+function potential!(FPM::ForcePartitionMethod{T};x₀=0,tᵢ=0,axis=1) where T
     # first we need to save the pressure field
     @inside FPM.σ[I] = FPM.pois.x[I]
     # generate source term
-    @inside FPM.pois.z[I] = source(FPM.body,loc(0,I,T),x₀,axis,tᵢ,Val(type))
+    if axis ≤ 3
+        @inside FPM.pois.z[I] = source(FPM.body,loc(0,I,T),x₀,axis,tᵢ,Val{true}())
+    else
+        @inside FPM.pois.z[I] = source(FPM.body,loc(0,I,T),x₀,(axis-1)%3+1,tᵢ,Val{false}())
+    end
     # solver for potential
     solver!(FPM.pois) # keep the tol the same as the pressure
     # copy to the FPM
@@ -43,22 +47,22 @@ function potential!(FPM::ForcePartitionMethod{T};x₀=0,tᵢ=0,axis=1,type::Symb
 end
 
 """
-    force(body,x₀,i,tᵢ,::Val{:force})
+    force(body,x₀,i,tᵢ,::Val{true})
     
     Compute the the source term for the force influence potential
     of the body at time tᵢ.
 """
-function source(body,x,x₀,i,tᵢ,::Val{:force})
+function source(body,x,x₀,i,tᵢ,::Val{true})
     dᵢ,nᵢ,_ = measure(body,x,tᵢ)
     WaterLily.kern(clamp(dᵢ,-1,1))*nᵢ[i] # i-component of the normal
 end
 """
-    moment(body,x,x₀,i,tᵢ,::Val{:moment})
+    moment(body,x,x₀,i,tᵢ,::Val{false})
 
     Compute the the source term for the moment influence potential
     of the body at time tᵢ aroudn point x₀.
 """
-function source(body,x,x₀,i,tᵢ,::Val{:moment}) # the axis here does not matter
+function source(body,x,x₀,i,tᵢ,::Val{false}) # the axis here does not matter
     dᵢ,nᵢ,_ = measure(body,x,tᵢ)
     WaterLily.kern(clamp(dᵢ,-1,1))*cross(i,(x.-x₀),nᵢ) # the normal moment
 end
@@ -82,18 +86,16 @@ end
     ∫2Qϕ!(::ForcePartitionMethod,::Flow,tᵢ,i,recompute=true)
     
     Compute the vorticity influence on the ith component of the force 
-    on the body at a time tᵢ. By specifying the `type` as `:moment` the 
-    influence on the moment is computed.
+    on the body at a time tᵢ.
     - FPM: ForcePartitionMethod
     - a: Flow
     - tᵢ: time, the default is the current time
     - i: component of the force
     - recompute: if true, the potential is recomputed (needed for moving geometries)
-    - type: :force or :moment
 """
-function ∫2QϕdV!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);axis=1,recompute=true,type::Symbol=:force)
+function ∫2QϕdV!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);axis=1,recompute=true)
     # get potential
-    recompute && potential!(FPM;type=type,tᵢ=tᵢ,axis=axis)
+    recompute && potential!(FPM;tᵢ=tᵢ,axis=axis)
     # compute the influence of the Q field
     @inside FPM.σ[I] = FPM.ϕ[I]*Qcriterion(I,a.u)
     # return the integral over the doman
@@ -101,20 +103,19 @@ function ∫2QϕdV!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);axi
 end
 
 """
-    ∮UϕdS!(::ForcePartitionMethod,::Flow,tᵢ,i,recompute=true,type=:force)
+    ∮UϕdS!(::ForcePartitionMethod,::Flow,tᵢ,i,recompute=true)
 
-    Compute the kinematic influence on the `ith` component of the force. By specifying
-    the `type` as `:moment` the influence on the moment is computed.
+    Compute the kinematic influence on the `ith` component of the force.
     - FPM: ForcePartitionMethod
     - a: Flow
     - tᵢ: time, the default is the current time
     - i: component of the force
     - recompute: if true, the potential is recomputed (needed for moving geometries)
-    - type: :force or :moment
 """
-function ∮UϕdS!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);axis=1,recompute=true,type::Symbol=:force)
+function ∮UϕdS!(FPM::ForcePartitionMethod,a::Flow,tᵢ=WaterLily.time(a);
+                axis=1,recompute=true)
     # get potential
-    recompute && potential!(FPM;type=type,tᵢ=tᵢ,axis=axis)
+    recompute && potential!(FPM;tᵢ=tᵢ,axis=axis)
     # compute the influence of kinematics
     @inside FPM.σ[I] = FPM.ϕ[I]*dUdtnds(I,FPM.body,tᵢ)
     # return the integral over the body
@@ -133,10 +134,10 @@ end
     the `type` as `:moment` the influence on the moment is computed.
 """
 function ∮ReωdS!(FPM::ForcePartitionMethod{T},a::Flow{D},tᵢ=WaterLily.time(a);
-                 axis=1,recompute=true,type::Symbol=:force) where {T,D}
+                 axis=1,recompute=true) where {T,D}
     # get potential
-    recompute && potential!(FPM;type=type,tᵢ=tᵢ,axis=axis)
-    e₁ = zeros(D); e₁[axis] = 1; e₁ = SVector{D}(e₁)
+    recompute && potential!(FPM;tᵢ=tᵢ,axis=axis)
+    e₁ = zeros(D); e₁[(axis-1)%3+1] = 1; e₁ = SVector{D}(e₁)
     # compute the vorticity × normal 
     @WaterLily.loop FPM.σ[I] = dot(ωxn(I,a.u,FPM.body,tᵢ),∇ϕ(I,FPM.ϕ).-e₁) over I ∈ inside(FPM.σ)
     # return the integral over the body
@@ -149,7 +150,9 @@ function ωxn(I::CartesianIndex{2},u,body,tᵢ)
     ω = WaterLily.∂(2,1,I,u)-WaterLily.∂(1,2,I,u) # at cell center
     SA[-ω*n[2],ω*n[1]]*WaterLily.kern(clamp(d,-1,1))
 end
-function ωxn(I,u,body,tᵢ)
+import WaterLily: fSV,permute
+cross(a::SVector{3},b::SVector{3}) = fSV(i->permute((j,k)->a[j]*b[k],i),3)
+function ωxn(I::CartesianIndex{3},u,body,tᵢ)
     d,n,_ = measure(body,loc(0,I),tᵢ)
     ω = WaterLily.ω(I,u) # at cell center
     cross(ω,n)*WaterLily.kern(clamp(d,-1,1))

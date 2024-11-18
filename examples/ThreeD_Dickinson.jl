@@ -81,8 +81,8 @@ fpm = ForcePartitionMethod(sim)
 potential!(fpm;axis=2) # change axis to 2 for lift
 
 # a simulation
-t₀ = sim_time(sim); duration = 12.0; tstep = 0.05 # print time
-forces,fp = [],[] # empty list to store forces
+t₀ = sim_time(sim); duration = 12; tstep = 0.05 # print time
+forces,fp,fm,fv = [],[],[],[] # empty list to store forces
 
 # simulate
 @time for tᵢ in range(t₀,t₀+duration;step=tstep)
@@ -101,7 +101,9 @@ forces,fp = [],[] # empty list to store forces
         # to find the actual force we have Fi = Ci/(1/2*ρ*U^2*L^2)
         force = -2WaterLily.pressure_force(sim)/sim.L^2
         push!(forces,[t/sim.L,force...])
-        push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=true))
+        push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=true,axis=4))
+        push!(fm,-∮UϕdS!(fpm,sim.flow,recompute=false,axis=4))
+        push!(fv, ∮ReωdS!(fpm,sim.flow,recompute=false,axis=4))
     end
     # this writes every tstep to paraview files, not every time step
     # write!(writer,sim);
@@ -114,4 +116,7 @@ println("Done...")
 plot(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,forces[:,2],label="Total force",
      xlabel="tU/L",ylabel="2F/ρU²L²") #,ylims=(1,3),xlims=(0,12))
 plot!(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,fp/sim.L^2,label="vorticity force")
+plot!(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,fm/sim.L^2,label="added-mass force")
+plot!(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,fv/sim.L^2,label="viscous force")
+plot!(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,(fp+fm+fv)/sim.L^2,label="total partition")
 savefig("force_partition_mosquito.png")
