@@ -66,9 +66,13 @@ WaterLily.write!(fname, avrgflow::AverageFlow; dir="data/") = jldsave(
     t=avrgflow.t
 )
 
-# f = ∇⋅τ = ∂ᵢτᵢⱼ
-SANS!(f::AbstractArray,τ::AbstractArray) = (f.=0; for (i,j) ∈ Iterators.product(1:2,1:2)
-    @loop f[I,i] = τ[I,i,j]-τ[I-δ(i,I),i,j] over I in inside_u(f)
+# f = ∇⋅τ = ∂ᵢτᵢⱼ, for example f₁ = ∂₁τ₁₁ + ∂₂τ₂₁, because τ is at cell center inline components are
+# simply the difference between neighboring cells, but the diagonal components are intepolated using the
+# average of the two neighboring cells.
+@fastmath SANS!(f::AbstractArray,τ::AbstractArray) = (f.=0; for (i,j) ∈ Iterators.product(1:2,1:2)
+    @loop f[I,i] = (i==j ? τ[I,i,j]-τ[I-δ(i,I),i,j] :
+                    @inbounds(τ[I+δ(j,I),i,j]+τ[I-δ(i,I)+δ(j,I),i,j]
+                             -τ[I-δ(j,I),i,j]-τ[I-δ(i,I)-δ(j,I),i,j])/4)  over I in inside_u(f)
 end)
 
 function spread!(src::Flow{2}, dest::Flow{3}; ϵ=0)
