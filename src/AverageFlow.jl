@@ -1,4 +1,5 @@
 using WaterLily
+using StatsBase
 using JLD2
 
 """
@@ -74,7 +75,14 @@ WaterLily.write!(fname, avrgflow::AverageFlow; dir="data/") = jldsave(
                     @inbounds(τ[I+δ(j,I),i,j]+τ[I-δ(i,I)+δ(j,I),i,j]
                              -τ[I-δ(j,I),i,j]-τ[I-δ(i,I)-δ(j,I),i,j])/4)  over I in inside_u(f)
 end)
+"""
+    spread!(src::Flow{2}, dest::Flow{3}; ϵ=0)
 
+    Spread the 2D flow field to a 3D flow field. The 2D flow field is spread to the 3rd dimension of the 3D flow field.
+    src - 2D flow field
+    dest - 3D flow field
+    ϵ - random noise added to the spread
+"""
 function spread!(src::Flow{2}, dest::Flow{3}; ϵ=0)
     @assert size(src.p)==Base.front(size(dest.p)) "a::Flow{2} must be the same size as b::Flow{3}[:,:,1,i] to spread"
     destp=dest.p; srcp=src.p; destu=dest.u; srcu=src.u # alias
@@ -82,4 +90,57 @@ function spread!(src::Flow{2}, dest::Flow{3}; ϵ=0)
     for i ∈ 1:2 # can only spread 2 components
         @loop destu[I,i] = srcu[Base.front(I),i]+ϵ*rand() over I in inside(destp)
     end
+end
+
+"""
+    profile!(sim,profiles;loc=[1,2])
+
+    Measure velocity profiles at certain locations.
+    sim - simulation object
+    profiles - array of profiles
+    loc - locations to measure the profiles in lengthscale units
+
+"""
+function profile!(sim,profiles;loc=[1,2]) # measure velocity profiles at certain locations
+    l = []
+    for x ∈ loc.*sim.L
+        push!(l,azimuthal_avrg(sim.flow.u[Int(x),:,:,1]))
+    end
+    push!(profiles,l)
+end
+Base.hypot(I::CartesianIndex) = √sum(abs2,I.I)
+"""
+    azimuthal_avrg(data; center=nothing, binsize=1.0)
+
+    Calculate the azimuthally averaged radial profile.
+    image - The 2D image
+    center - The [x,y] pixel coordinates used as the center. The default is 
+             None, which then uses the center of the image (including 
+             fractional pixels).
+    binsize - size of the averaging bin.  Can lead to strange results if
+        non-binsize factors are used to specify the center and the binsize is
+        too large
+    """
+function azimuthal_avrg(data; center=nothing, binsize=1.0)
+
+    # Calculate the indices from the image
+    CIs = CartesianIndices(data)
+    isnothing(center) && (center = (maximum(CIs)-minimum(CIs)).I.÷2)
+    
+    # radial distance from the center, make it a vector
+    r = weights(hypot.(collect(CIs .- CartesianIndex(center)))).values
+    
+    # the 'bins' as initially defined are lower/upper bounds for each bin
+    # so that values will be in [lower,upper)  
+    nbins = Int(round(maximum(r) / binsize)+1)
+    maxbin = nbins * binsize
+    bins = range(0,maxbin;length=nbins+1)
+    # but we're probably more interested in the bin centers than their left or right sides...
+    bin_centers = (bins[1:end-1].+bins[2:end])/2.0
+    r_weights = fit(Histogram, r, bins, closed=:left).weights
+
+    # compute the azimuthal average
+    radial_prof = fit(Histogram, r, weights(data), bins, closed=:left).weights ./ r_weights
+    
+    return bin_centers, radial_prof
 end
