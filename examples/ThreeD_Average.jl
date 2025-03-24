@@ -6,7 +6,7 @@ function circ(D,dims,Ubc;Re=200,U=1,mem=CUDA.CuArray,perdir=())
     Simulation(dims, Ubc, D; body, ν=U*D/Re, mem, perdir)
 end
 
-import WaterLily: scale_u!,BCTuple,conv_diff!,accelerate!,BDIM!,BC!,project!,CFL
+import WaterLily: scale_u!,BCTuple,conv_diff!,accelerate!,BDIM!,BC!,project!,CFL,@loop,size_u
 @fastmath function mom_step_force!(a::Flow{N},b::AbstractPoisson,∇τ) where N
     a.u⁰ .= a.u; scale_u!(a,0)
     # predictor u → u'

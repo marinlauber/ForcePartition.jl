@@ -1,3 +1,9 @@
 .vscode/
 Manifest.toml
 examples/Manifest.toml
+*.*png
+*.*jpg
+*.*jpeg
+*.*gif
+*.*pvd
+*.*vti
