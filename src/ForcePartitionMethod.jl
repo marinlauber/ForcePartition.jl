@@ -41,7 +41,7 @@ function potential!(FPM::ForcePartitionMethod{A,T};x₀=0,axis=nothing,tᵢ=0) w
         @inside FPM.pois.z[I] = source(FPM.body,loc(0,I,T),x₀,(axis-1)%3+1,tᵢ,Val{false}())
     end
     # solver for potential
-    solver!(FPM.pois) # keep the tol the same as the pressure
+    solver!(FPM.pois); pop!(FPM.pois.n) # keep the tol the same as the pressure and don't write the iterations
     # copy to the FPM
     @inside FPM.ϕ[I] = FPM.pois.x[I]
     @inside FPM.pois.x[I] = FPM.σ[I] # put back pressure field
@@ -95,13 +95,14 @@ end
     - recompute: if true, the potential is recomputed (needed for moving geometries)
 """
 function ∫2QϕdV!(FPM::ForcePartitionMethod,a::Flow,tᵢ=sum(a.Δt);
-                 axis=nothing,recompute=true)
+                 axis=nothing,recompute=true,T=promote_type(Float64,eltype(a.p)))
+    FPM.σ .= 0
     # get potential
     recompute && potential!(FPM;tᵢ=tᵢ,axis=axis)
     # compute the influence of the Q field
     @inside FPM.σ[I] = FPM.ϕ[I]*Qcriterion(I,a.u)
     # return the integral over the doman
-    2sum(@inbounds(FPM.σ[inside(FPM.σ)]))
+    2sum(T,FPM.σ)
 end
 
 """
@@ -115,13 +116,14 @@ end
     - recompute: if true, the potential is recomputed (needed for moving geometries)
 """
 function ∮UϕdS!(FPM::ForcePartitionMethod,a::Flow,tᵢ=sum(a.Δt);
-                axis=nothing,recompute=true)
+                axis=nothing,recompute=true,T=promote_type(Float64,eltype(a.p)))
+    FPM.σ .= 0
     # get potential
     recompute && potential!(FPM;tᵢ=tᵢ,axis=axis)
     # compute the influence of kinematics
     @inside FPM.σ[I] = FPM.ϕ[I]*dUdtnds(I,FPM.body,tᵢ)
     # return the integral over the body
-    sum(@inbounds(FPM.σ[inside(FPM.σ)]))
+    sum(T,FPM.σ)
 end
 using ForwardDiff: derivative
 @inline function dUdtnds(I,body,tᵢ)
@@ -137,14 +139,15 @@ end
 """
 function ∮ReωdS!(FPM::ForcePartitionMethod{A,T},a::Flow{D},tᵢ=sum(a.Δt);
                  axis=nothing,recompute=true) where {A,T,D}
+    FPM.σ .= 0
     # get potential
     recompute && potential!(FPM;tᵢ=tᵢ,axis=axis)
     isnothing(axis) && (axis = A)
     e₁ = zeros(D); e₁[(axis-1)%3+1] = 1; e₁ = SVector{D}(e₁)
     # compute the vorticity × normal 
-    @WaterLily.loop FPM.σ[I] = dot(ωxn(I,a.u,FPM.body,tᵢ),∇ϕ(I,FPM.ϕ).-e₁) over I ∈ inside(FPM.σ)
+    @WaterLily.loop FPM.σ[I] = a.ν*dot(ωxn(I,a.u,FPM.body,tᵢ),∇ϕ(I,FPM.ϕ).-e₁) over I ∈ inside(FPM.σ)
     # return the integral over the body
-    a.ν*sum(@inbounds(FPM.σ[inside(FPM.σ)]))
+    sum(promote_type(Float64,T),FPM.σ)
 end
 ∇ϕ(I::CartesianIndex{2},ϕ) = @SVector[WaterLily.∂(i,I,ϕ) for i ∈ 1:2]
 ∇ϕ(I::CartesianIndex{3},ϕ) = @SVector[WaterLily.∂(i,I,ϕ) for i ∈ 1:3]

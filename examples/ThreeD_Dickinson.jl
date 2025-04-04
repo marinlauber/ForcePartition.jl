@@ -6,6 +6,9 @@ using ForcePartition
 using WriteVTK
 using Plots
 
+# strating from reste
+WaterLily.CFL(a::Flow) = WaterLily.CFL(a;Δt_max=0.5)
+
 # make simulation foloowing Dickinson's setup
 function Dickinson(p=5;Re=5e2,mem=Array,T=Float32)
     # Define simulation size, geometry dimensions, & viscosity
@@ -60,21 +63,23 @@ end
 sim = Dickinson(4;mem=CUDA.CuArray,T=Float32)
 
 # make a writer with some attributes, need to output to CPU array to save file (|> Array)
-velocity(a::Simulation) = a.flow.u |> Array;
-pressure(a::Simulation) = a.flow.p |> Array;
-_body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a));
-                                     a.flow.σ |> Array;)
-lamda(a::Simulation) = (@inside a.flow.σ[I] = WaterLily.λ₂(I, a.flow.u);
-                        a.flow.σ |> Array;)
+vtk_velocity(a::AbstractSimulation) = a.flow.u |> Array;
+vtk_pressure(a::AbstractSimulation) = a.flow.p |> Array;
+vtk_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a)); a.flow.σ |> Array;)
+vtk_lambda(a::AbstractSimulation) = (@inside a.flow.σ[I] = WaterLily.λ₂(I, a.flow.u); a.flow.σ |> Array;)
+vtk_Q(a::AbstractSimulation) = (@inside a.flow.σ[I] = ForcePartition.Qcriterion(I, a.flow.u); a.flow.σ |> Array)
+vtk_ϕ(a::AbstractSimulation) = (potential!(fpm;axis=2,tᵢ=sum(a.flow.Δt)); fpm.ϕ |> Array)
 
 custom_attrib = Dict(
-    "Velocity" => velocity,
-    "Pressure" => pressure,
-    "Body" => _body,
-    "Lambda" => lamda
+    "Velocity" => vtk_velocity,
+    "Pressure" => vtk_pressure,
+    "Body" => vtk_body,
+    "λ2" => vtk_lambda,
+    "Q" => vtk_Q,
+    "ϕ" => vtk_ϕ,
 )# this maps what to write to the name in the file
 # make the writer
-# writer = vtkWriter("Dickinson"; attrib=custom_attrib)
+writer = vtkWriter("Dickinson"; attrib=custom_attrib)
 
 # force moment
 fpm = ForcePartitionMethod(sim)
@@ -92,31 +97,27 @@ forces,fp,fm,fv = [],[],[],[] # empty list to store forces
     # this is normaly hiden into sim_step!(sim,tᵢ)
     while t < tᵢ*sim.L/sim.U
         #update the body
-        measure!(sim,t)
-        # update flow
-        mom_step!(sim.flow,sim.pois) 
+        sim_step!(sim,tᵢ;remasure=true)
         # update time
         t += sim.flow.Δt[end]
         # compute and save pressure forces, this is actually a force coefficient, 
         # to find the actual force we have Fi = Ci/(1/2*ρ*U^2*L^2)
-        force = -2WaterLily.pressure_force(sim)/sim.L^2
+        force = -2WaterLily.pressure_force(sim)
         push!(forces,[t/sim.L,force...])
-        push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=true,axis=4))
-        push!(fm,-∮UϕdS!(fpm,sim.flow,recompute=false,axis=4))
-        push!(fv, ∮ReωdS!(fpm,sim.flow,recompute=false,axis=4))
+        push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=true,axis=2))
+        push!(fm,-∮UϕdS!(fpm,sim.flow,recompute=false,axis=2))
+        push!(fv, ∮ReωdS!(fpm,sim.flow,recompute=false,axis=2))
     end
     # this writes every tstep to paraview files, not every time step
-    # write!(writer,sim);
+    write!(writer,sim);
 end
 forces = reduce(vcat,forces')
 println("Done...")
-# close(writer)
+close(writer)
 
 # plot results
-plot(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,forces[:,2],label="Total force",
+time = vcat(0,cumsum(sim.flow.Δt))./sim.L # time vector
+plot(time,[forces[:,2]./sim.L^2, fp/sim.L^2, fm/sim.L^2, fv/sim.L^2, (fp+fm+fv)/sim.L^2],
+     label=["Total force" "vorticity force" "added-mass force" "viscous force" "total partition"],
      xlabel="tU/L",ylabel="2F/ρU²L²") #,ylims=(1,3),xlims=(0,12))
-plot!(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,fp/sim.L^2,label="vorticity force")
-plot!(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,fm/sim.L^2,label="added-mass force")
-plot!(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,fv/sim.L^2,label="viscous force")
-plot!(cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L,(fp+fm+fv)/sim.L^2,label="total partition")
 savefig("force_partition_mosquito.png")

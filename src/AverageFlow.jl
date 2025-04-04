@@ -125,16 +125,16 @@ function azimuthal_avrg(data; center=nothing, binsize=1.0)
 
     # Calculate the indices from the image
     CIs = CartesianIndices(data)
-    isnothing(center) && (center = (maximum(CIs)-minimum(CIs)).I.÷2)
+    isnothing(center) && (center = (maximum(CIs)-minimum(CIs)).I.÷2 .+ 1)
     
     # radial distance from the center, make it a vector
     r = weights(hypot.(collect(CIs .- CartesianIndex(center)))).values
     
     # the 'bins' as initially defined are lower/upper bounds for each bin
     # so that values will be in [lower,upper)  
-    nbins = Int(round(maximum(r) / binsize)+1)
+    nbins = Int(round(maximum(r) / binsize))
     maxbin = nbins * binsize
-    bins = range(0,maxbin;length=nbins+1)
+    bins = range(0,maxbin;length=nbins)
     # but we're probably more interested in the bin centers than their left or right sides...
     bin_centers = (bins[1:end-1].+bins[2:end])/2.0
     r_weights = fit(Histogram, r, bins, closed=:left).weights
