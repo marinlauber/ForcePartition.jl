@@ -30,15 +30,15 @@ end
     Compute the the influence potential of the body at time tᵢ for either 
     the `:force` or the `:moment`.
 """
-function potential!(FPM::ForcePartitionMethod{A,T};x₀=0,axis=nothing,tᵢ=0) where {A,T}
+function potential!(FPM::ForcePartitionMethod{A,T},body;x₀=0,axis=nothing,tᵢ=0) where {A,T}
     # first we need to save the pressure field
     @inside FPM.σ[I] = FPM.pois.x[I]
     # generate source term
     isnothing(axis) && (axis=A) # if we provide an axis, we use it
     if axis ≤ 3
-        @inside FPM.pois.z[I] = source(FPM.body,loc(0,I,T),x₀,axis,tᵢ,Val{true}())
+        @inside FPM.pois.z[I] = source(body,loc(0,I,T),x₀,axis,tᵢ,Val{true}())
     else
-        @inside FPM.pois.z[I] = source(FPM.body,loc(0,I,T),x₀,(axis-1)%3+1,tᵢ,Val{false}())
+        @inside FPM.pois.z[I] = source(body,loc(0,I,T),x₀,(axis-1)%3+1,tᵢ,Val{false}())
     end
     # solver for potential
     solver!(FPM.pois); pop!(FPM.pois.n) # keep the tol the same as the pressure and don't write the iterations
@@ -98,7 +98,7 @@ function ∫2QϕdV!(FPM::ForcePartitionMethod,a::Flow,tᵢ=sum(a.Δt);
                  axis=nothing,recompute=true,T=promote_type(Float64,eltype(a.p)))
     FPM.σ .= 0
     # get potential
-    recompute && potential!(FPM;tᵢ=tᵢ,axis=axis)
+    recompute && potential!(FPM,FPM.body;tᵢ=tᵢ,axis=axis)
     # compute the influence of the Q field
     @inside FPM.σ[I] = FPM.ϕ[I]*Qcriterion(I,a.u)
     # return the integral over the doman
@@ -119,7 +119,7 @@ function ∮UϕdS!(FPM::ForcePartitionMethod,a::Flow,tᵢ=sum(a.Δt);
                 axis=nothing,recompute=true,T=promote_type(Float64,eltype(a.p)))
     FPM.σ .= 0
     # get potential
-    recompute && potential!(FPM;tᵢ=tᵢ,axis=axis)
+    recompute && potential!(FPM,FPM.body;tᵢ=tᵢ,axis=axis)
     # compute the influence of kinematics
     @inside FPM.σ[I] = FPM.ϕ[I]*dUdtnds(I,FPM.body,tᵢ)
     # return the integral over the body
@@ -141,7 +141,7 @@ function ∮ReωdS!(FPM::ForcePartitionMethod{A,T},a::Flow{D},tᵢ=sum(a.Δt);
                  axis=nothing,recompute=true) where {A,T,D}
     FPM.σ .= 0
     # get potential
-    recompute && potential!(FPM;tᵢ=tᵢ,axis=axis)
+    recompute && potential!(FPM,FPM.body;tᵢ=tᵢ,axis=axis)
     isnothing(axis) && (axis = A)
     e₁ = zeros(D); e₁[(axis-1)%3+1] = 1; e₁ = SVector{D}(e₁)
     # compute the vorticity × normal 

@@ -22,7 +22,7 @@ end
 # run a sim and plot the time evolution
 sim = make_airfoil(L=32)
 fpm = ForcePartitionMethod(sim;axis=6) # z-moment
-potential!(fpm;tᵢ=0)
+potential!(fpm,fpm.body;tᵢ=0)
 t₀,duration,step = 0.,2.0,0.2
 force, fp = [],[]
 
