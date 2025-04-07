@@ -65,8 +65,8 @@ vtk_pressure(a::AbstractSimulation) = a.flow.p |> Array;
 vtk_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a)); a.flow.σ |> Array;)
 vtk_lambda(a::AbstractSimulation) = (@inside a.flow.σ[I] = WaterLily.λ₂(I, a.flow.u); a.flow.σ |> Array;)
 vtk_Q(a::AbstractSimulation) = (@inside a.flow.σ[I] = ForcePartition.Qcriterion(I, a.flow.u); a.flow.σ |> Array)
-vtk_ϕ1(a::AbstractSimulation) = (potential!(fpm,body1;axis=2,tᵢ=sum(a.flow.Δt)); fpm.ϕ |> Array)
-vtk_ϕ2(a::AbstractSimulation) = (potential!(fpm,body2;axis=2,tᵢ=sum(a.flow.Δt)); fpm.ϕ |> Array)
+vtk_ϕ1(a::AbstractSimulation) = (potential!(fpm,body1;tᵢ=sum(a.flow.Δt)); fpm.ϕ |> Array)
+vtk_ϕ2(a::AbstractSimulation) = (potential!(fpm,body2;tᵢ=sum(a.flow.Δt)); fpm.ϕ |> Array)
 
 custom_attrib = Dict("u" => vtk_velocity,"p" => vtk_pressure,"d" => vtk_body,
                      "λ2" => vtk_lambda,"Q" => vtk_Q,"ϕ1" => vtk_ϕ1,"ϕ2"=> vtk_ϕ2)# this maps what to write to the name in the file
@@ -74,8 +74,8 @@ custom_attrib = Dict("u" => vtk_velocity,"p" => vtk_pressure,"d" => vtk_body,
 writer = vtkWriter("Dickinson"; attrib=custom_attrib)
 
 # force moment
-fpm = ForcePartitionMethod(sim)
-potential!(fpm,fpm.body;axis=3) # change axis to 3 for lift
+fpm = ForcePartitionMethod(sim,axis=3) # axis to 3 for lift
+potential!(fpm,fpm.body)
 
 # a simulation
 t₀ = sim_time(sim); duration = 12; tstep = 0.05 # print time
@@ -96,9 +96,9 @@ forces,fp,fm,fv = [],[],[],[] # empty list to store forces
         force = -2WaterLily.pressure_force(sim)
         push!(forces,[t/sim.L,force...])
         # the totential is the same, we just recompute it once and then use it
-        push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=true,axis=2))
-        push!(fm,-∮UϕdS!(fpm,sim.flow,recompute=false,axis=2))
-        push!(fv, ∮ReωdS!(fpm,sim.flow,recompute=false,axis=2))
+        push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=true))
+        push!(fm,-∮UϕdS!(fpm,sim.flow,recompute=false))
+        push!(fv, ∮ReωdS!(fpm,sim.flow,recompute=false))
     end
     # this writes every tstep to paraview files, not every time step
     write!(writer,sim);
