@@ -49,7 +49,7 @@ function Dickinson(p=5;Re=5e2,mem=Array,T=Float32)
     upper_lower = AutoBody((x,t)->(abs(x[3])-thk/2), map)
     # this creates the final body
     body1 = elipsoid ∩ upper_lower # intersection of sets
-    body2 = AutoBody(sdf, (x,t)->map(x.+SA[L,0,0],t+π/2)) ∩ AutoBody((x,t)->(abs(x[3])-thk/2), (x,t)->map(x.+SA[L,0,0],t+π/2))
+    body2 = AutoBody(sdf, (x,t)->map(x.-SA[0,0,2L/3],t+π)) ∩ AutoBody((x,t)->(abs(x[3])-thk/2), (x,t)->map(x.-SA[0,0,2L/3],t+π))
     body = body1 ∪ body2 # union of sets
 
     # Return initialized simulation
@@ -75,7 +75,7 @@ writer = vtkWriter("Dickinson"; attrib=custom_attrib)
 
 # force moment
 fpm = ForcePartitionMethod(sim)
-potential!(fpm,fpm.body;axis=2) # change axis to 2 for lift
+potential!(fpm,fpm.body;axis=3) # change axis to 3 for lift
 
 # a simulation
 t₀ = sim_time(sim); duration = 12; tstep = 0.05 # print time

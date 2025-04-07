@@ -46,6 +46,7 @@ function potential!(FPM::ForcePartitionMethod{A,T},body;x₀=0,axis=nothing,tᵢ
     @inside FPM.ϕ[I] = FPM.pois.x[I]
     @inside FPM.pois.x[I] = FPM.σ[I] # put back pressure field
 end
+potential!(FPM;kwargs...) = potential!(FPM,FPM.body;kwargs...) # for backward compatibility
 
 """
     force(body,x₀,i,tᵢ,::Val{true})
