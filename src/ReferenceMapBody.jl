@@ -2,12 +2,14 @@ using WaterLily
 using ForwardDiff
 using StaticArrays
 import WaterLily: @loop,CI,∂
+using Plots
 
-@inline F(i,j,I,ξ) = inv(∂(j,CI(I,i),ξ)+eps())
+@inline F(i,j,I,ξ::AbstractArray{T}) where T = (dF=∂(j,CI(I,i),ξ); abs(dF)≈eps(T) ? zero(T) : inv(∂(j,CI(I,i),ξ)+eps(T)))
 # uniform field, no deformation gradient
 ξ = ones(10,10,2); apply!((i,x)->x[i], ξ)
-σ = ones(10,10)
-@inside σ[I] = F(1,1,I,ξ)
+σ = zeros(10,10)
+@inside σ[I] = F(2,1,I,ξ)
+flood(σ)
 @inline FFᵀ(i,j,I,ξ) = inv(∂(j,CI(I,i),ξ))*inv(∂(i,CI(I,j),ξ))
 @inline trFFᵀ(i,j,I::CartesianIndex{n},ξ) where n = sum(FFᵀ(i,i,I,ξ) for i ∈ 1:n)
 # plane-strain incompressible neo Hookean law
