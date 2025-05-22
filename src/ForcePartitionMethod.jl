@@ -31,15 +31,12 @@ end
     the `:force` or the `:moment`.
 """
 function potential!(FPM::ForcePartitionMethod{A,T},body;x₀=0,axis=nothing,tᵢ=0) where {A,T}
+    @assert !(ndims(FPM.ϕ)==2 && axis ∈ [3,4,5]) "Only 1, 2 and 6 are valid axis for 2D sims"
     # first we need to save the pressure field
     @inside FPM.σ[I] = FPM.pois.x[I]
     # generate source term
     isnothing(axis) && (axis=A) # if we provide an axis, we use it
-    if axis ≤ 3
-        @inside FPM.pois.z[I] = source(body,loc(0,I,T),x₀,axis,tᵢ,Val{true}())
-    else
-        @inside FPM.pois.z[I] = source(body,loc(0,I,T),x₀,(axis-1)%3+1,tᵢ,Val{false}())
-    end
+    @inside FPM.pois.z[I] = source(body,loc(0,I,T),x₀,axis,tᵢ)
     # solver for potential
     solver!(FPM.pois); pop!(FPM.pois.n) # keep the tol the same as the pressure and don't write the iterations
     # copy to the FPM
@@ -49,22 +46,26 @@ end
 potential!(FPM;kwargs...) = potential!(FPM,FPM.body;kwargs...) # for backward compatibility
 
 """
-    force(body,x₀,i,tᵢ,::Val{true})
+    source term for the potential, either force or moment depending on the axis
+"""
+source(body,x,x₀,axis,tᵢ) = axis ≤ 3 ? force(body,x,axis,tᵢ) : moment(body,x,x₀,(axis-1)%3+1,tᵢ)
+"""
+    force(body,x₀,i,tᵢ)
     
     Compute the the source term for the force influence potential
     of the body at time tᵢ.
 """
-function source(body,x,x₀,i,tᵢ,::Val{true})
+function force(body,x,i,tᵢ)
     dᵢ,nᵢ,_ = measure(body,x,tᵢ)
     WaterLily.kern(clamp(dᵢ,-1,1))*nᵢ[i] # i-component of the normal
 end
 """
-    moment(body,x,x₀,i,tᵢ,::Val{false})
+    moment(body,x,x₀,i,tᵢ)
 
     Compute the the source term for the moment influence potential
     of the body at time tᵢ aroudn point x₀.
 """
-function source(body,x,x₀,i,tᵢ,::Val{false})
+function moment(body,x,x₀,i,tᵢ)
     dᵢ,nᵢ,_ = measure(body,x,tᵢ)
     WaterLily.kern(clamp(dᵢ,-1,1))*cross(i,(x.-x₀),nᵢ) # the normal moment
 end
@@ -127,7 +128,7 @@ function ∮UϕdS!(FPM::ForcePartitionMethod,a::Flow,tᵢ=sum(a.Δt);
     sum(T,FPM.σ)
 end
 using ForwardDiff: derivative
-@inline function dUdtnds(I,body,tᵢ)
+@inline function dUdtnds(I,body,tᵢ) #TODO check order of operation
     d,nᵢ,_ = measure(body,loc(0,I),tᵢ)
     aᵢ = derivative(tᵢ->derivative(tᵢ->body.map(loc(0,I),tᵢ),tᵢ),tᵢ)
     sum(nᵢ.*aᵢ)*WaterLily.kern(clamp(d,-1,1))

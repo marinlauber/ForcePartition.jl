@@ -16,7 +16,7 @@
 # ForcePartition.jl
 
 The repo contains a Julia implementation of the force partition method (FPM) for the computation of the force and moment acting on a body immersed in a fluid flow. The method is based on the work of 
-[K. Menon and R. Mittal](https://doi.org/10.1016/j.jcp.2021.110515) and the examples shown here replicate the examples presented in their paper.
+[K. Menon and R. Mittal](https://doi.org/10.1016/j.jcp.2021.110515)[K. Menon and R. Mittal](https://arxiv.org/pdf/2006.11649) and the examples shown here replicate the examples presented in their paper.
 
 This code has been written with the aim of applying it directly within [WaterLily.jl](https://github.com/weymouth/WaterLily.jl) simulations and is therefore tailored to the specific needs of that package. However, it can be used as a standalone package for the computation of forces and moments on a body immersed in a fluid flow.
 
