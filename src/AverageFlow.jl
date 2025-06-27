@@ -38,7 +38,7 @@ function span_average!(avrg::AverageFlow,flow::Flow)
         @loop avrg.v[Base.front(I),i] += ϵ*flow.u[I,i] over I in inside(flow.p)
         # spanwise fluctuating velocity over all cells, needs to be cell centered
         @loop flow.f[I,i] = center(i,I,flow.u) - center(i,Base.front(I),avrg.v) over I in inside(flow.p)
-    end 
+    end
     for i ∈ 1:2, j ∈ 1:2 # τᵢⱼᴿ = < u' ⊗ u' > , needs to be at cell center as ∇⋅τ is then added to faces
         @loop avrg.τ[Base.front(I),i,j] += ϵ*flow.f[I,i].*flow.f[I,j] over I in inside(flow.p)
     end
@@ -59,7 +59,7 @@ function mean!(avrg::AverageFlow, flow::Flow; stats_turb=true)
     push!(avrg.t, avrg.t[end] + dt)
 end
 
-WaterLily.write!(fname, avrgflow::AverageFlow; dir="data/") = jldsave(
+WaterLily.save!(fname, avrgflow::AverageFlow; dir="data/") = jldsave(
     dir*fname*".jld2";
     ϕ=Array(avrgflow.ϕ),
     f=Array(avrgflow.f),
@@ -68,7 +68,7 @@ WaterLily.write!(fname, avrgflow::AverageFlow; dir="data/") = jldsave(
 )
 
 # f = ∇⋅τ = ∂ᵢτᵢⱼ, for example f₁ = ∂₁τ₁₁ + ∂₂τ₂₁, because τ is at cell center inline components are
-# simply the difference between neighboring cells, but the diagonal components are intepolated using the
+# simply the difference between neighboring cells, but the diagonal components are interpolated using the
 # average of the two neighboring cells.
 @fastmath SANS!(f::AbstractArray,τ::AbstractArray) = (f.=0; for (i,j) ∈ Iterators.product(1:2,1:2)
     @loop f[I,i] = (i==j ? τ[I,i,j]-τ[I-δ(i,I),i,j] :
@@ -114,8 +114,8 @@ Base.hypot(I::CartesianIndex) = √sum(abs2,I.I)
 
     Calculate the azimuthally averaged radial profile.
     image - The 2D image
-    center - The [x,y] pixel coordinates used as the center. The default is 
-             None, which then uses the center of the image (including 
+    center - The [x,y] pixel coordinates used as the center. The default is
+             None, which then uses the center of the image (including
              fractional pixels).
     binsize - size of the averaging bin.  Can lead to strange results if
         non-binsize factors are used to specify the center and the binsize is
@@ -126,12 +126,12 @@ function azimuthal_avrg(data; center=nothing, binsize=1.0)
     # Calculate the indices from the image
     CIs = CartesianIndices(data)
     isnothing(center) && (center = (maximum(CIs)-minimum(CIs)).I.÷2 .+ 1)
-    
+
     # radial distance from the center, make it a vector
     r = weights(hypot.(collect(CIs .- CartesianIndex(center)))).values
-    
+
     # the 'bins' as initially defined are lower/upper bounds for each bin
-    # so that values will be in [lower,upper)  
+    # so that values will be in [lower,upper)
     nbins = Int(round(maximum(r) / binsize))
     maxbin = nbins * binsize
     bins = range(0,maxbin;length=nbins)
@@ -141,6 +141,6 @@ function azimuthal_avrg(data; center=nothing, binsize=1.0)
 
     # compute the azimuthal average
     radial_prof = fit(Histogram, r, weights(data), bins, closed=:left).weights ./ r_weights
-    
+
     return bin_centers, radial_prof
 end

@@ -1,15 +1,15 @@
 using WaterLily,StaticArrays,ForcePartition,Plots
 
-function make_circle(;L=32,Re=250,U=1)
+function make_circle(;L=32,Re=250,U=1,T=Float32,mem=Array)
     # parameters
-    radius, center = L/2, 4L
-    center = SA[center,center]
+    radius, center = T(L/2), T(4L)
+    center = SA{T}[center,center]
 
     # make a body
-    circle = AutoBody((x,t)->√sum(abs2, x .- center .- 1.5) - radius)
+    circle = AutoBody((x,t)->√sum(abs2, x .- center .- 1.5f0) - radius)
 
     # generate sim
-    Simulation((16*L,8*L), (U,0), radius; ν=U*radius/Re, body=circle)
+    Simulation((16*L,8*L), (U,0), radius; ν=U*radius/Re, body=circle, T, mem)
 end
 
 # run a sim and plot the time evolution
@@ -45,7 +45,7 @@ end
 # plot results
 time = cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L
 plot(time,[force/2sim.L,forcev/2sim.L,fp/2sim.L,fa/2sim.L,-fv/2sim.L,(fp.+fa.-fv)/2sim.L],
-     label=["pressure force" "viscous force" "vorticity force (partition)" "added-mass force (partition)" 
+     label=["pressure force" "viscous force" "vorticity force (partition)" "added-mass force (partition)"
             "viscous force (partition)" "parition force"],
      xlabel="tU/L",ylabel="2F/ρU²L",ylims=(0,2),xlims=(0,100),dpi=600)
 savefig("force_partition.png")

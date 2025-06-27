@@ -29,14 +29,14 @@ end
 @inline force!(a::Flow,Ⅎ::AbstractArray) = @loop a.f[Ii] += Ⅎ[Ii] over Ii in CartesianIndices(a.f)
 
 # make a writer with some attributes, need to output to CPU array to save file (|> Array)
-_velocity(a::Simulation) = a.flow.u |> Array;
-_pressure(a::Simulation) = a.flow.p |> Array;
-vort(a::Simulation) = (@loop a.flow.f[I,:] .= WaterLily.ω(I,a.flow.u) over I ∈ inside(a.flow.p);
-                       a.flow.f |> Array)
-_body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a)); 
-                                     a.flow.σ |> Array;)
-lamda(a::Simulation) = (@loop a.flow.σ[I] = WaterLily.λ₂(I, a.flow.u) over I ∈ inside(a.flow.p);
-                        a.flow.σ |> Array;)
+vtk_velocity(a::Simulation) = a.flow.u |> Array;
+vtk__pressure(a::Simulation) = a.flow.p |> Array;
+vtk__vort(a::Simulation) = (@loop a.flow.f[I,:] .= WaterLily.ω(I,a.flow.u) over I ∈ inside(a.flow.p);
+                            a.flow.f |> Array)
+vtk__body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a));
+                            a.flow.σ |> Array;)
+vtk_lamda(a::Simulation) = (@loop a.flow.σ[I] = WaterLily.λ₂(I, a.flow.u) over I ∈ inside(a.flow.p);
+                            a.flow.σ |> Array;)
 
 function u_span(a::Simulation) # spanwise average velocity
     ϵ = inv(size(inside(a.flow.p),3)) # sum over domain
@@ -89,7 +89,7 @@ for t in range(0,20.0;step=0.05)#1:6
         mom_step_force!(sim2D.flow,sim2D.pois,avrg.v) # 2D update
         sim2D.flow.Δt[end] = sim.flow.Δt[end] # keep time in sync
     end
-    write!(writer,sim); write!(writer2D,sim2D)
+    save!(writer,sim); save!(writer2D,sim2D)
     @show t
     flush(stdout)
 end

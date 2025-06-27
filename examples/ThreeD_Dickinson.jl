@@ -28,24 +28,24 @@ function Dickinson(p=5;Re=5e2,mem=Array,T=Float32)
         end
         # compute final point and distance
         d = norm(x-ab.*SA[cos(w),sin(w)]);
-        
+
         # return signed distance
         return (dot(x./ab,x./ab)>1.0) ? d : -d
     end
-    
+
     # the mapping
     function map(x,t)
         # Dickinson kinemtics
         _α = π/2 - π/4*sin(π*t/L)  # positive pitch increase AoA
-        _ϕ = 0.35π*cos(π*t/L)      # positive to the rear of the mosquito 
+        _ϕ = 0.35π*cos(π*t/L)      # positive to the rear of the mosquito
         # rotation mmatrix
         Ry = SA[cos(_α) 0 sin(_α); 0 1 0; -sin(_α) 0 cos(_α)] # alpha
         Rz = SA[cos(_ϕ) -sin(_ϕ) 0; sin(_ϕ) cos(_ϕ) 0; 0 0 1] # phi
         return Ry*Rz*(x .- SA[2L,0,L]) # the order matters
     end
-   
+
     # Build the mosquito from a mapped elipsoid and two plane that trim it to the correct thickness
-    elipsoid = AutoBody(sdf, map)      
+    elipsoid = AutoBody(sdf, map)
     upper_lower = AutoBody((x,t)->(abs(x[3])-thk/2), map)
     # this creates the final body
     body1 = elipsoid ∩ upper_lower # intersection of sets
@@ -91,7 +91,7 @@ forces,fp,fm,fv = [],[],[],[] # empty list to store forces
         sim_step!(sim;remasure=true)
         # update time
         t += sim.flow.Δt[end]
-        # compute and save pressure forces, this is actually a force coefficient, 
+        # compute and save pressure forces, this is actually a force coefficient,
         # to find the actual force we have Fi = Ci/(1/2*ρ*U^2*L^2)
         force = -2WaterLily.pressure_force(sim)
         push!(forces,[t/sim.L,force...])
@@ -101,7 +101,7 @@ forces,fp,fm,fv = [],[],[],[] # empty list to store forces
         push!(fv, ∮ReωdS!(fpm,sim.flow,recompute=false))
     end
     # this writes every tstep to paraview files, not every time step
-    write!(writer,sim);
+    save!(writer,sim);
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
 end
 forces = reduce(vcat,forces')
