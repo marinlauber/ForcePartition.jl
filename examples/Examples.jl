@@ -1,4 +1,4 @@
-using WaterLily,StaticArrays,ForcePartition,Plots
+using WaterLily,StaticArrays,ForcePartition
 
 function make_circle(;L=32,Re=250,U=1)
     # parameters
@@ -63,9 +63,6 @@ qϕ = -∫2QϕdV!(fpm,sim.flow,20.0,recompute=false)
 # total force
 force = -WaterLily.pressure_force(sim)
 
-
-using WaterLily,StaticArrays,ForcePartition,Plots
-
 function make_sphere(;L=32,Re=250,U=1)
     radius, center = L/2, SA[2L,2L,2L]
     # make a body
@@ -96,7 +93,7 @@ contourf(fpm.ϕ[:,64,:]',aspect_ratio=:equal,cmap=:seismic)
 @inside sim.flow.σ[I] = ifelse(sdf(sim.body,loc(0,I),0)<0.01,NaN,sim.flow.σ[I])
 p1 = contourf(sim.flow.σ[:,:,64]',clims=(0,2),aspect_ratio=:equal,levels=11,filled=true,frame=:none,title="U-velocity")
 
-@inside sim.flow.σ[I] = -WaterLily.∂(2,I,fpm.ϕ) 
+@inside sim.flow.σ[I] = -WaterLily.∂(2,I,fpm.ϕ)
 @inside sim.flow.σ[I] = ifelse(sdf(sim.body,loc(0,I),0)<0.01,NaN,sim.flow.σ[I])
 p2 = contourf(sim.flow.σ[:,:,64]',clims=(-1,1),aspect_ratio=:equal,levels=11,filled=true,frame=:none,title="V-velocity")
 plot(p1,p2, layout = @layout [a b])

@@ -1,63 +1,48 @@
 using WaterLily,StaticArrays,LinearAlgebra
-using CUDA,ForcePartition,WriteVTK,Plots
+using CUDA,ForcePartition,WriteVTK#,Plots
 
 # strating from rest
 WaterLily.CFL(a::Flow) = WaterLily.CFL(a;Δt_max=0.5)
 
 # make simulation following Dickinson's setup
-function Dickinson(p=5;Re=5e2,mem=Array,T=Float32)
-    # Define simulation size, geometry dimensions, & viscosity
-    L = 2^p; U=1; ν = U*L/Re
-    ϵ = 0.5; thk = 2ϵ+√3
-    AR = 2.0
+function Dickinson(L=64;U=1,Re=5e2,ε=0.5f0,thk=2ε+√3,AR=2,mem=Array,T=Float32)
+
+    # ellipse sdf
     function sdf(x,t)
         # offset it to put origin at tip, and stretch it by AR. remove radius for sdf
-        √sum(abs2, SA[x[1], (x[2]-1.5L/2)/AR, 0]) - L/2/AR
-    end
-    function wing(xyz,t)
-        # put in symmetry, correct scaling
-        x = abs.(SA[xyz[1],xyz[2]-1.5L/2]); ab=SA[L/2AR,L/2]
-
-        # find root with Newton solver
-        q = ab.*(x-ab);
-        w = (q[1]<q[2]) ? π/2 : 0.0;
-        for i ∈ 1:5
-            u = ab.*SA[ cos(w),sin(w)]
-            v = ab.*SA[-sin(w),cos(w)]
-            w += dot(x-u,v)/(dot(x-u,u)+dot(v,v));
-        end
-        # compute final point and distance
-        d = norm(x-ab.*SA[cos(w),sin(w)]);
-
-        # return signed distance
-        return (dot(x./ab,x./ab)>1.0) ? d : -d
+        √sum(abs2, SA[x[1], (x[2]-1.5f0L/2.f0)/AR, 0]) - L/2/AR
     end
 
     # the mapping
     function map(x,t)
         # Dickinson kinemtics
-        _α = π/2 - π/4*sin(π*t/L)  # positive pitch increase AoA
-        _ϕ = 0.35π*cos(π*t/L)      # positive to the rear of the mosquito
+        _α = π/2.f0 - π/4.f0*sin(π*t/L)  # positive pitch increase AoA
+        _ϕ = 0.35f0π*cos(π*t/L)      # positive to the rear of the mosquito
         # rotation mmatrix
         Ry = SA[cos(_α) 0 sin(_α); 0 1 0; -sin(_α) 0 cos(_α)] # alpha
         Rz = SA[cos(_ϕ) -sin(_ϕ) 0; sin(_ϕ) cos(_ϕ) 0; 0 0 1] # phi
         return Ry*Rz*(x .- SA[2L,0,L]) # the order matters
     end
 
-    # Build the mosquito from a mapped elipsoid and two plane that trim it to the correct thickness
-    elipsoid = AutoBody(sdf, map)
-    upper_lower = AutoBody((x,t)->(abs(x[3])-thk/2), map)
+    # Build the mosquito from a mapped ellipsoid and two plane that trim it to the correct thickness
+    ellipsoid = AutoBody(sdf, map)
+    upper_lower = AutoBody((x,t)->(abs(x[3])-thk/2.f0), map)
+    wing_1 = ellipsoid ∩ upper_lower # intersection of sets
+
+    # second wing
+    ellipsoid = AutoBody(sdf, (x,t)->map(x.-SA[0,0,2L/3.f0],t+π))
+    upper_lower = AutoBody((x,t)->(abs(x[3])-thk/2.f0), (x,t)->map(x.-SA[0,0,2L/3.f0],t+π))
+    wing_2 = ellipsoid ∩ upper_lower # intersection of sets
+
     # this creates the final body
-    body1 = elipsoid ∩ upper_lower # intersection of sets
-    body2 = AutoBody(sdf, (x,t)->map(x.-SA[0,0,2L/3],t+π)) ∩ AutoBody((x,t)->(abs(x[3])-thk/2), (x,t)->map(x.-SA[0,0,2L/3],t+π))
-    body = body1 ∪ body2 # union of sets
+    body = wing_1 + wing_2
 
     # Return initialized simulation
-    Simulation((4L,3L,4L),(0,0,0),L;ν,U,body,mem,T),body1,body2
+    return (Simulation((4L,3L,4L),(0,0,0),L;ν=U*L/Re,U,body,mem,T),wing_1,wing_2)
 end
 
 # make a simulation
-sim,body1,body2 = Dickinson(4;mem=CUDA.CuArray,T=Float32)
+sim,body1,body2 = Dickinson(2^4;mem=CuArray,T=Float32)
 
 # make a writer with some attributes, need to output to CPU array to save file (|> Array)
 vtk_velocity(a::AbstractSimulation) = a.flow.u |> Array;
@@ -97,7 +82,7 @@ forces,fp,fm,fv = [],[],[],[] # empty list to store forces
         push!(forces,[t/sim.L,force...])
         # the totential is the same, we just recompute it once and then use it
         push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=true))
-        push!(fm,-∮UϕdS!(fpm,sim.flow,recompute=false))
+        # push!(fm,-∮UϕdS!(fpm,sim.flow,recompute=false))
         push!(fv, ∮ReωdS!(fpm,sim.flow,recompute=false))
     end
     # this writes every tstep to paraview files, not every time step

@@ -4,7 +4,7 @@ using LinearAlgebra: tr,dot
 
 """
     ForcePartitionMethod(sim::WaterLily.Simulation)
-    
+
     A struct to compute the influence of the flow field on a body.
     - ϕ: potential field (allocates a new field)
     - σ: scalar field (points to `sim.flow.σ` to avoid allocating)
@@ -27,7 +27,7 @@ end
 """
     potential!(FPM::ForcePartitionMethod;axis,tᵢ)
 
-    Compute the the influence potential of the body at time tᵢ for either 
+    Compute the the influence potential of the body at time tᵢ for either
     the `:force` or the `:moment`.
 """
 function potential!(FPM::ForcePartitionMethod{A,T},body;x₀=0,axis=nothing,tᵢ=0) where {A,T}
@@ -49,9 +49,10 @@ potential!(FPM;kwargs...) = potential!(FPM,FPM.body;kwargs...) # for backward co
     source term for the potential, either force or moment depending on the axis
 """
 source(body,x,x₀,axis,tᵢ) = axis ≤ 3 ? force(body,x,axis,tᵢ) : moment(body,x,x₀,(axis-1)%3+1,tᵢ)
+
 """
     force(body,x₀,i,tᵢ)
-    
+
     Compute the the source term for the force influence potential
     of the body at time tᵢ.
 """
@@ -59,6 +60,7 @@ function force(body,x,i,tᵢ)
     dᵢ,nᵢ,_ = measure(body,x,tᵢ)
     WaterLily.kern(clamp(dᵢ,-1,1))*nᵢ[i] # i-component of the normal
 end
+
 """
     moment(body,x,x₀,i,tᵢ)
 
@@ -74,7 +76,7 @@ cross(i,a::SVector{3},b::SVector{3}) = (j=i%3+1;k=(i+1)%3+1;a[j]*b[k]-a[k]*b[j])
 
 """
     Qcriterion(I::CartesianIndex,u)
-    
+
     Compute the Q-criterion for a 2D/3D velocity field
 """
 function Qcriterion(I,u)
@@ -87,8 +89,8 @@ end
 
 """
     ∫2Qϕ!(::ForcePartitionMethod,::Flow,tᵢ,i,recompute=true)
-    
-    Compute the vorticity influence on the ith component of the force 
+
+    Compute the vorticity influence on the ith component of the force
     on the body at a time tᵢ.
     - FPM: ForcePartitionMethod
     - a: Flow
@@ -123,16 +125,18 @@ function ∮UϕdS!(FPM::ForcePartitionMethod,a::Flow,tᵢ=sum(a.Δt);
     # get potential
     recompute && potential!(FPM,FPM.body;tᵢ=tᵢ,axis=axis)
     # compute the influence of kinematics
-    @inside FPM.σ[I] = FPM.ϕ[I]*dUdtnds(I,FPM.body,tᵢ)
+    @inside FPM.σ[I] = FPM.ϕ[I]*dUdtnds(I,FPM.body,tᵢ,eltype(a.p))
     # return the integral over the body
     sum(T,FPM.σ)
 end
 using ForwardDiff: derivative
-@inline function dUdtnds(I,body,tᵢ) #TODO check order of operation
-    d,nᵢ,_ = measure(body,loc(0,I),tᵢ)
-    aᵢ = derivative(tᵢ->derivative(tᵢ->body.map(loc(0,I),tᵢ),tᵢ),tᵢ)
-    sum(nᵢ.*aᵢ)*WaterLily.kern(clamp(d,-1,1))
+@inline vbody(body::AbstractBody,x,t=0;fastd²=0) = measure(body,x,t;fastd²)[3]
+@inline function dUdtnds(I,body,tᵢ,T)
+    d,nᵢ,_ = measure(body, loc(0,I), tᵢ)
+    aᵢ = derivative(tᵢ->vbody(body, loc(0,I), tᵢ), tᵢ)
+    (nᵢ'*aᵢ)*WaterLily.kern(clamp(d,-1,1))
 end
+
 """
     ∮ReωdS!(::ForcePartitionMethod,::Flow,tᵢ,i,recompute=true,type=:force)
 
@@ -146,7 +150,7 @@ function ∮ReωdS!(FPM::ForcePartitionMethod{A,T},a::Flow{D},tᵢ=sum(a.Δt);
     recompute && potential!(FPM,FPM.body;tᵢ=tᵢ,axis=axis)
     isnothing(axis) && (axis = A)
     e₁ = zeros(D); e₁[(axis-1)%3+1] = 1; e₁ = SVector{D}(e₁)
-    # compute the vorticity × normal 
+    # compute the vorticity × normal
     @WaterLily.loop FPM.σ[I] = a.ν*dot(ωxn(I,a.u,FPM.body,tᵢ),∇ϕ(I,FPM.ϕ).-e₁) over I ∈ inside(FPM.σ)
     # return the integral over the body
     sum(promote_type(Float64,T),FPM.σ)
