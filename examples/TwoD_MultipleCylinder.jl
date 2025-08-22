@@ -10,61 +10,56 @@ function make_circle(;L=32,Re=250,U=1,T=Float32,mem=Array)
 end
 
 # run a sim and plot the time evolution
-sim = make_circle(L=32)
-sim_step!(sim, 10)
-# flood
-@inside sim.flow.σ[I] = WaterLily.curl(3,I,sim.flow.u)*sim.L/sim.U
-@inside sim.flow.σ[I] = ifelse(abs(sim.flow.σ[I])<0.001,0.0,sim.flow.σ[I])
-flood(sim.flow.σ; levels=20, shift=(-0.5,-0.5),clims=(-5,5))
+# sim = make_circle(L=32); sim_step!(sim, 10)
+measure!(sim.flow,sim.body); update!(sim.pois)
+# Q-field
+Q = copy(sim.flow.σ);
+@inside Q[I] = ForcePartition.Qcriterion(I,sim.flow.u)
+# @inside sim.flow.σ[I] = ifelse(abs(sim.flow.σ[I])<0.001,0.0,sim.flow.σ[I])
+flood(Q[inside(Q)]; levels=50,lw=0.2)
+
 # force partition
 fpm = ForcePartitionMethod(sim)
 potential!(fpm,fpm.body;tᵢ=0,axis=1)
-flood(fpm.ϕ; levels=20)
+active = sim.body.a
+passive = sim.body.b
+@inside fpm.ϕ[I] =  WaterLily.μ₀(sdf(active,loc(0,I),0),1)*WaterLily.μ₀(sdf(passive,loc(0,I),0),1)*fpm.ϕ[I]
+p1 = flood(fpm.ϕ[inside(fpm.ϕ)]; levels=100,clims=(-32,32),lw=0.2,axis=([], false),
+           legend=false,border=:none, title="ϕ₁ | nᵢ⋅∇ϕ=nᵢ on B₁ ∪ B₂")
+body_plot!(sim); annotate!([2sim.L,3.5sim.L],[2sim.L,1.5sim.L],["B₁","B₂"])
+Qϕ = -2.0.*(fpm.ϕ.*Q); int=round(sum(Qϕ)\sim.L,digits=3)
+p12 = flood(Qϕ[inside(Qϕ)],clims=(-1,1),levels=30,lw=0.2,axis=([], false),cfill=:bam,
+           legend=false,border=:non,title="-2∫Qϕ₁dV=$int")
+body_plot!(sim); annotate!([2sim.L,3.5sim.L],[2sim.L,1.5sim.L],["B₁","B₂"])
+ # new potential only with the active body
+potential!(fpm,active;tᵢ=0,axis=1)
+@inside fpm.ϕ[I] =  WaterLily.μ₀(sdf(active,loc(0,I),0),1)*WaterLily.μ₀(sdf(passive,loc(0,I),0),1)*fpm.ϕ[I]
+ϕ_1_neumann = copy(fpm.ϕ)
+p2 = flood(fpm.ϕ[inside(fpm.ϕ)]; levels=100,clims=(-32,32),lw=0.2,axis=([], false),
+           legend=false,border=:none, title="ϕ₁ | nᵢ⋅∇ϕ=nᵢ on B₁; nᵢ⋅∇ϕ=0 on B₂")
+body_plot!(sim); annotate!([2sim.L,3.5sim.L],[2sim.L,1.5sim.L],["B₁","B₂"])
+Qϕ = -2.0.*(fpm.ϕ.*Q); int=round(sum(Qϕ)\sim.L,digits=3)
+p21 = flood(Qϕ[inside(Qϕ)],clims=(-1,1),levels=30,lw=0.2,axis=([], false),cfill=:bam,
+           legend=false,border=:none,title="-2∫Qϕ₁dV=$int")
+body_plot!(sim); annotate!([2sim.L,3.5sim.L],[2sim.L,1.5sim.L],["B₁","B₂"])
 
+# case where the second body is removed entierly
+measure!(sim.flow,active); update!(sim.pois)
+potential!(fpm,active;tᵢ=0,axis=1)
+@inside fpm.ϕ[I] =  WaterLily.μ₀(sdf(active,loc(0,I),0),1)*fpm.ϕ[I]
+ϕ_1_nob2 = copy(fpm.ϕ)
+p3 = flood(fpm.ϕ[inside(fpm.ϕ)]; levels=100,clims=(-32,32),lw=0.2,axis=([], false),
+           legend=false,border=:none, title="ϕ₁ | nᵢ⋅∇ϕ=nᵢ on B₁; B₂ ≡ ∅")
+Qϕ = -2.0.*(fpm.ϕ.*Q); int=round(sum(Qϕ)\sim.L,digits=3)
+p31 = flood(Qϕ[inside(Qϕ)],clims=(-1,1),levels=30,lw=0.2,axis=([], false),cfill=:bam,
+            legend=false,border=:none,title="-2∫Qϕ₁dV=$int")
+body_plot!(sim); annotate!([2sim.L,3.5sim.L],[2sim.L,1.5sim.L],["B₁","B₂"])
+# save fig
+plot(p1,p12,p2,p21,p3,p31,layout=(3,2),size=(1800,1800))
+savefig("potential_influence_various_BCs.png")
 
-
-
-
-
-
-
-
-
-
-
-# t₀,duration,step = 0.,10,0.2
-# force,forcev,fp,fa,fv = [],[],[],[],[]
-
-# @time @gif for tᵢ in range(t₀,t₀+duration;step)
-#     # update until time tᵢ in the background
-#     while sim_time(sim) < tᵢ
-#         # update flow
-#         mom_step!(sim.flow,sim.pois)
-#         # pressure force
-#         push!(force,-2WaterLily.pressure_force(sim)[1])
-#         push!(forcev,-2WaterLily.viscous_force(sim)[1])
-#         push!(fa,-∮UϕdS!(fpm,sim.flow,recompute=false))
-#         push!(fp,-∫2QϕdV!(fpm,sim.flow,recompute=false))
-#         push!(fv, ∮ReωdS!(fpm,sim.flow,recompute=false))
-#     end
-
-#     # plot vorticity
-#     @inside sim.flow.σ[I] = WaterLily.curl(3,I,sim.flow.u)*sim.L/sim.U
-#     @inside sim.flow.σ[I] = ifelse(abs(sim.flow.σ[I])<0.001,0.0,sim.flow.σ[I])
-#     flood(sim.flow.σ; levels=20, shift=(-0.5,-0.5),clims=(-5,5))
-#     body_plot!(sim); plot!(title="tU/L $tᵢ")
-
-#     # print time step
-#     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
-# end
-
-# # plot results
-# time = cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L
-# p1=plot(time,[forcev/2sim.L,-fv/2sim.L],
-#         label=["viscous force" "viscous force (partition)"],
-#         ylabel="2F/ρU²L",ylims=(0,0.1),xlims=(0,100),dpi=600)
-# p2=plot(time,[force/2sim.L,fp/2sim.L,fa/2sim.L,(fp.+fa.-fv)/2sim.L],
-#         label=["pressure force" "vorticity force (partition)" "added-mass force (partition)" "total partition force"],
-#         xlabel="tU/L",ylabel="2F/ρU²L",ylims=(0,2),xlims=(0,100),dpi=600)
-# plot(p1,p2,layout=(2,1),size=(800,600))
-# savefig("force_partition.png")
+Qϕ = -2Q.*((ϕ_1_neumann.-ϕ_1_nob2)); int=round(sum(Qϕ[inside(Qϕ)])\sim.L,digits=3)
+flood(Qϕ[inside(Qϕ)],levels=30,lw=0.2,axis=([],false),cfill=:bam,
+      legend=false,border=:none,title="-2∫Qϕ₁dV=$int")
+body_plot!(sim); annotate!([2sim.L,3.5sim.L],[2sim.L,1.5sim.L],["B₁","B₂"])
+savefig("difference_potentials_homogeneousNeumann_nobc.png")
