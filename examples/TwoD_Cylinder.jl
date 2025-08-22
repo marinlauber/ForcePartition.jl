@@ -44,8 +44,11 @@ end
 
 # plot results
 time = cumsum(@views(sim.flow.Δt[1:end-1]))./sim.L
-plot(time,[force/2sim.L,forcev/2sim.L,fp/2sim.L,fa/2sim.L,-fv/2sim.L,(fp.+fa.-fv)/2sim.L],
-     label=["pressure force" "viscous force" "vorticity force (partition)" "added-mass force (partition)"
-            "viscous force (partition)" "parition force"],
-     xlabel="tU/L",ylabel="2F/ρU²L",ylims=(0,2),xlims=(0,100),dpi=600)
+p1=plot(time,[forcev/2sim.L,-fv/2sim.L],
+        label=["viscous force" "viscous force (partition)"],
+        ylabel="2F/ρU²L",ylims=(0,0.1),xlims=(0,100),dpi=600)
+p2=plot(time,[force/2sim.L,fp/2sim.L,fa/2sim.L,(fp.+fa.-fv)/2sim.L],
+        label=["pressure force" "vorticity force (partition)" "added-mass force (partition)" "total partition force"],
+        xlabel="tU/L",ylabel="2F/ρU²L",ylims=(0,2),xlims=(0,100),dpi=600)
+plot(p1,p2,layout=(2,1),size=(800,600))
 savefig("force_partition.png")

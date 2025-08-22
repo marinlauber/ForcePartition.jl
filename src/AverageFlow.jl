@@ -2,35 +2,41 @@ using WaterLily
 using StatsBase
 using JLD2
 
+# abstract Types to distinguish AverageFlows
+abstract type MeanFlow end
+abstract type SpanAverage end
 """
      AverageFlow{T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}, Mf<:AbstractArray{T}}
 Holds averages of velocity, , pressure, and Reynolds stresses.
 """
-struct AverageFlow{T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}, Mf<:AbstractArray{T}}
+struct AverageFlow{I, T, Sf<:AbstractArray{T}, Vf<:AbstractArray{T}, Mf<:AbstractArray{T}}
     ϕ :: Sf # scalar, cell senter
     v :: Vf # vector, face
     τ :: Mf # tensor, cell center
     t :: Vector{T} # time
+    function AverageFlow(ϕ,v,τ,t,I)
+        new{I,eltype(ϕ),typeof(ϕ),typeof(v),typeof(τ)}(ϕ,v,τ,t)
+    end
 end
 function SpanAverage(flow::Flow{D,T}; N=size(flow.p), t_init=0.0) where {D,T}
     mem = typeof(flow.u).name.wrapper
     ϕ = zeros(T, Base.front(N)) |> mem
     v = zeros(T, Base.front(N)...,D-1) |> mem
     τ = zeros(T, Base.front(N)...,D-1,D-1) |> mem
-    AverageFlow(ϕ,v,τ,T[t_init])
+    AverageFlow(ϕ,v,τ,T[t_init],I=SpanAverage)
 end
 function MeanFlow(flow::Flow{D,T}; N=size(flow.p), t_init=0.0) where {D,T}
     mem = typeof(flow.u).name.wrapper
     ϕ = zeros(T, N) |> mem
     v = zeros(T, N...,D) |> mem
     τ = zeros(T, N...,D,D) |> mem
-    AverageFlow(ϕ,v,τ,T[t_init])
+    AverageFlow(ϕ,v,τ,T[t_init],I=MeanFlow)
 end
 
 import WaterLily: Flow,@loop,time,size_u,inside_u,inside
 # spanwise average of velocity component `a` at cell center
 @inline center(i,I,u) = @inbounds (u[I,i]+u[I+δ(i,I),i])*0.5 # convert face to cell center
-function span_average!(avrg::AverageFlow,flow::Flow)
+function update!(avrg::AverageFlow{SpanAverage}, flow::Flow)
     ϵ = inv(size(inside(flow.p),3)) # sum over domain
     N,n = size_u(flow.u); avrg.v .= 0.0; avrg.τ .= 0.0 # reset
     for i ∈ 1:2 # u = U - ũ
@@ -46,7 +52,7 @@ end
 
 # fluctuating velocity u' = u - U at cell center I
 fluct(a,I,u,U) = @inbounds 0.5*((u[I+δ(a,I),a]+u[I,a])-(U[I+δ(a,I),a]+U[I,a]))
-function mean!(avrg::AverageFlow, flow::Flow; stats_turb=true)
+function update!(avrg::AverageFlow{MeanFlow}, flow::Flow; stats_turb=true)
     dt = time(flow) - avrg.t[end]
     ϵ = dt / (dt + (avrg.t[end] - avrg.t[1]) + eps(eltype(flow.p)))
     @loop avrg.ϕ[I] = ϵ*flow.p[I] + (1.0 - ϵ)*avrg.ϕ[I] over I in CartesianIndices(flow.p)
@@ -85,11 +91,12 @@ end)
 """
 function spread!(src::Flow{2}, dest::Flow{3}; ϵ=0)
     @assert size(src.p)==Base.front(size(dest.p)) "a::Flow{2} must be the same size as b::Flow{3}[:,:,1,i] to spread"
-    destp=dest.p; srcp=src.p; destu=dest.u; srcu=src.u # alias
-    @loop destp[I] = srcp[Base.front(I)] over I in inside(destp)
-    for i ∈ 1:2 # can only spread 2 components
-        @loop destu[I,i] = srcu[Base.front(I),i]+ϵ*rand() over I in inside(destp)
-    end
+    spread!(src.p, dest.p; ϵ=0) # spread pressure
+    spread!(src.u, dest.u; ϵ=ϵ) # spread velocity
+end
+spread!(src::AbstractArray{T,2},dest::AbstractArray{T,3};ϵ=0) where T = @loop dest[I] = src[Base.front(I)] over I in inside(dest)
+spread!(src::AbstractArray{T,3},dest::AbstractArray{T,4};ϵ=0) where T = for i in 1:2 # can only spread 2 components
+    @loop dest[I,i] = src[Base.front(I),i]+ϵ*rand() over I in inside(dest)
 end
 
 """
