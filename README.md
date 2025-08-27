@@ -16,7 +16,7 @@
 # ForcePartition.jl
 
 The repo contains a Julia implementation of the force partition method (FPM) for the computation of the force and moment acting on a body immersed in a fluid flow. The method is based on the work of 
-[K. Menon and R. Mittal](https://doi.org/10.1016/j.jcp.2021.110515) and their initial paper [K. Menon and R. Mittal](https://arxiv.org/pdf/2006.11649) and the examples shown here replicate the examples presented in their paper.
+[K. Menon and R. Mittal](https://arxiv.org/pdf/2011.04632) and their initial paper [K. Menon and R. Mittal](https://arxiv.org/pdf/2006.11649) and the examples shown here replicate the examples presented in their paper.
 
 This code has been written with the aim of applying it directly within [WaterLily.jl](https://github.com/weymouth/WaterLily.jl) simulations and is therefore tailored to the specific needs of that package. However, it can be used as a standalone package for the computation of forces and moments on a body immersed in a fluid flow.
 
@@ -94,13 +94,14 @@ This is the classical flow around a 2D cylinder. The example file can be found [
 
 ![cylinder](assets/cylinder.gif)
 
-The result of the force partition is shown below, we comapre the total pressure force acting on the cylinder with the vorticity component of the force. The total force is computed by integrating the pressure field over the surface of the cylinder, while the vorticity component is computed by the force partition method. The results are shown below
+The result of the force partition is shown below, we compare the total pressure force acting on the cylinder with the vorticity component of the force. The total force is computed by integrating the pressure field over the surface of the cylinder, while the vorticity component is computed by the force partition method. The results are shown below
 
 ![fp_cylinder](assets/force_partition.png)
 
 #### 2D flow around a pitching airfoil
 
-TBF
+Vorticity moment contribution from the flow around a NACA0012 in pure pitch motion
+![pitching-airfoil](assets/pitching_airfoil.gif)
 
 ![cylinder](assets/airfoil.gif)
 

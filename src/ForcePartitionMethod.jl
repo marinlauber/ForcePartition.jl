@@ -99,13 +99,13 @@ end
     - recompute: if true, the potential is recomputed (needed for moving geometries)
 """
 function ∫2QϕdV!(FPM::ForcePartitionMethod,a::Flow,tᵢ=sum(a.Δt);
-                 axis=nothing,recompute=true,T=promote_type(Float64,eltype(a.p)))
+                 x₀=0,axis=nothing,recompute=true,T=promote_type(Float64,eltype(a.p)))
     FPM.σ .= 0
     # get potential
-    recompute && potential!(FPM,FPM.body;tᵢ=tᵢ,axis=axis)
+    recompute && potential!(FPM;x₀=x₀,axis=axis,tᵢ=tᵢ)
     # compute the influence of the Q field
     @inside FPM.σ[I] = FPM.ϕ[I]*Qcriterion(I,a.u)
-    # return the integral over the doman
+    # return the integral over the domain
     2sum(T,FPM.σ)
 end
 
@@ -120,10 +120,10 @@ end
     - recompute: if true, the potential is recomputed (needed for moving geometries)
 """
 function ∮UϕdS!(FPM::ForcePartitionMethod,a::Flow,tᵢ=sum(a.Δt);
-                axis=nothing,recompute=true,T=promote_type(Float64,eltype(a.p)))
+                x₀=0,axis=nothing,recompute=true,T=promote_type(Float64,eltype(a.p)))
     FPM.σ .= 0
     # get potential
-    recompute && potential!(FPM,FPM.body;tᵢ=tᵢ,axis=axis)
+    recompute && potential!(FPM;x₀=x₀,axis=axis,tᵢ=tᵢ)
     # compute the influence of kinematics
     @inside FPM.σ[I] = FPM.ϕ[I]*dUdtnds(I,FPM.body,tᵢ,eltype(a.p))
     # return the integral over the body
@@ -138,16 +138,20 @@ using ForwardDiff: derivative
 end
 
 """
-    ∮ReωdS!(::ForcePartitionMethod,::Flow,tᵢ,i,recompute=true,type=:force)
+    ∮ReωdS!(::ForcePartitionMethod,::Flow,tᵢ,i,recompute=true)
 
-    Compute the viscous influence on the `ith` component of the force. By specifying
-    the `type` as `:moment` the influence on the moment is computed.
+    Compute the viscous influence on the `ith` component of the force.
+    - FPM: ForcePartitionMethod
+    - a: Flow
+    - tᵢ: time, the default is the current time
+    - i: component of the force
+    - recompute: if true, the potential is recomputed (needed for moving geometries)
 """
 function ∮ReωdS!(FPM::ForcePartitionMethod{A,T},a::Flow{D},tᵢ=sum(a.Δt);
-                 axis=nothing,recompute=true) where {A,T,D}
+                 x₀=0,axis=nothing,recompute=true) where {A,T,D}
     FPM.σ .= 0
     # get potential
-    recompute && potential!(FPM,FPM.body;tᵢ=tᵢ,axis=axis)
+    recompute && potential!(FPM;x₀=x₀,axis=axis,tᵢ=tᵢ)
     isnothing(axis) && (axis = A)
     e₁ = zeros(D); e₁[(axis-1)%3+1] = 1; e₁ = SVector{D}(e₁)
     # compute the vorticity × normal
