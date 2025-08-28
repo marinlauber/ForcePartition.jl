@@ -11,7 +11,7 @@ end
 
 # run a sim and plot the time evolution
 using CUDA
-sim = make_circle(L=64,mem=CuArray)
+sim = make_circle(L=64,mem=Array)
 fpm = ForcePartitionMethod(sim)
 potential!(fpm,fpm.body;tᵢ=0,axis=1)
 t₀,duration,step = 0.,50,0.05

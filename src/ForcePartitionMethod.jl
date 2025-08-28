@@ -19,6 +19,7 @@ struct ForcePartitionMethod{A,T,Sf<:AbstractArray{T},Vf<:AbstractArray{T}}
     pois :: AbstractPoisson
     body :: AbstractBody
     function ForcePartitionMethod(sim::AbstractSimulation;axis=1)
+        @assert !(ndims(sim.flow.u)==2 && axis ∈ [3,4,5]) "Only 1, 2 and 6 are valid axis for 2D sims"
         ϕ,σ,f = copy(sim.flow.p),sim.flow.σ,sim.flow.f # σ and f point to the flow fields
         new{axis,eltype(sim.flow.u),typeof(ϕ),typeof(f)}(ϕ,σ,f,sim.pois,sim.body) # we point to the poisson solver of the flow
     end
@@ -100,6 +101,7 @@ end
 """
 function ∫2QϕdV!(FPM::ForcePartitionMethod,a::Flow,tᵢ=sum(a.Δt);
                  x₀=0,axis=nothing,recompute=true,T=promote_type(Float64,eltype(a.p)))
+    @assert !(ndims(FPM.ϕ)==2 && axis ∈ [3,4,5]) "Only 1, 2 and 6 are valid axis for 2D sims"
     FPM.σ .= 0
     # get potential
     recompute && potential!(FPM;x₀=x₀,axis=axis,tᵢ=tᵢ)
@@ -121,6 +123,7 @@ end
 """
 function ∮UϕdS!(FPM::ForcePartitionMethod,a::Flow,tᵢ=sum(a.Δt);
                 x₀=0,axis=nothing,recompute=true,T=promote_type(Float64,eltype(a.p)))
+    @assert !(ndims(FPM.ϕ)==2 && axis ∈ [3,4,5]) "Only 1, 2 and 6 are valid axis for 2D sims"
     FPM.σ .= 0
     # get potential
     recompute && potential!(FPM;x₀=x₀,axis=axis,tᵢ=tᵢ)
@@ -149,23 +152,38 @@ end
 """
 function ∮ReωdS!(FPM::ForcePartitionMethod{A,T},a::Flow{D},tᵢ=sum(a.Δt);
                  x₀=0,axis=nothing,recompute=true) where {A,T,D}
+    @assert !(ndims(FPM.ϕ)==2 && axis ∈ [3,4,5]) "Only 1, 2 and 6 are valid axis for 2D sims"
     FPM.σ .= 0
     # get potential
     recompute && potential!(FPM;x₀=x₀,axis=axis,tᵢ=tᵢ)
     isnothing(axis) && (axis = A)
-    e₁ = zeros(D); e₁[(axis-1)%3+1] = 1; e₁ = SVector{D}(e₁)
+    e₁ = zeros(D); e₁[min((axis-1)%3+1,D)] = 1; e₁ = SVector{D}(e₁)
     # compute the vorticity × normal
-    @WaterLily.loop FPM.σ[I] = a.ν*dot(ωxn(I,a.u,FPM.body,tᵢ),∇ϕ(I,FPM.ϕ).-e₁) over I ∈ inside(FPM.σ)
+    C = ceil(Int,axis/3) # 1 for force, 2 for moment
+    @WaterLily.loop FPM.σ[I] = a.ν*dot(ωxn(I,a.u,FPM.body,tᵢ),∇ϕ(I,FPM.ϕ).-e₁x(e₁,loc(0,I),x₀,Val{C}())) over I ∈ inside(FPM.σ)
     # return the integral over the body
     sum(promote_type(Float64,T),FPM.σ)
 end
-∇ϕ(I::CartesianIndex{2},ϕ) = @SVector[WaterLily.∂(i,I,ϕ) for i ∈ 1:2]
-∇ϕ(I::CartesianIndex{3},ϕ) = @SVector[WaterLily.∂(i,I,ϕ) for i ∈ 1:3]
+
+#term ê₁ for force calculation, returns ê₁
+@inline @fastmath e₁x(e₁,x,x₀,::Val{1}) = e₁
+# the term ê₁×(X-Xₔ) for the moment calculation, assuming ê₁ 2D is out of plane [0,0,1]
+@inline @fastmath e₁x(e₁::SVector{2},x,x₀,::Val{2}) = SA[-(x[2]-x₀[2]), (x[1]-x₀[1])]
+# full term in 3D
+@inline @fastmath e₁x(e₁::SVector{3},x,x₀,::Val{2}) = cross(e₁,x-x₀)
+
+# gradient of ϕ, 2D and 3D version
+@inline @fastmath ∇ϕ(I::CartesianIndex{2},ϕ) = @SVector[WaterLily.∂(i,I,ϕ) for i ∈ 1:2]
+@inline @fastmath ∇ϕ(I::CartesianIndex{3},ϕ) = @SVector[WaterLily.∂(i,I,ϕ) for i ∈ 1:3]
+
+# compute ω×n at the body surface, 2D version
 function ωxn(I::CartesianIndex{2},u,body,tᵢ)
     d,n,_ = measure(body,loc(0,I),tᵢ)
     ω = WaterLily.∂(2,1,I,u)-WaterLily.∂(1,2,I,u) # at cell center
     SA[-ω*n[2],ω*n[1]]*WaterLily.kern(clamp(d,-1,1))
 end
+
+# compute ω×n at the body surface, 3D version
 import WaterLily: fSV,permute
 cross(a::SVector{3},b::SVector{3}) = fSV(i->permute((j,k)->a[j]*b[k],i),3)
 function ωxn(I::CartesianIndex{3},u,body,tᵢ)
