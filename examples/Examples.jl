@@ -31,7 +31,7 @@ flood(fpm.ϕ[R],levels=11,filled=true)
 body_plot!(sim)
 xlims!(100,200); ylims!(100,160)
 
-# gradient should be similar to potential flow solution, except the frame of refernce we are in
+# gradient should be similar to potential flow solution, except the frame of reference we are in
 R = inside(fpm.ϕ)
 @inside sim.flow.σ[I] = 1-ForcePartition.∇ϕ(I,fpm.ϕ)[1]
 # @inside sim.flow.σ[I] = 1-WaterLily.∂(1,I,fpm.ϕ)
@@ -53,12 +53,12 @@ plot(p1,p2, layout = @layout [a b])
 flood(sim.flow.σ,clims=(0,1/sim.L),cmap=:blues,lw=0)
 xlims!(64,300); ylims!(68,192)
 
-# what is the influemce field
+# what is the influence field
 @inside sim.flow.σ[I] = fpm.ϕ[I]*ForcePartition.Qcriterion(I,sim.flow.u)
 flood(sim.flow.σ[R],clims=(0,1/sim.L),levels=31,cmap=:blues)
 xlims!(64,300); ylims!(68,192)
 
-# qfield influence
+# Q-field influence
 qϕ = -∫2QϕdV!(fpm,sim.flow,20.0,recompute=false)
 # total force
 force = -WaterLily.pressure_force(sim)

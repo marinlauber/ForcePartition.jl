@@ -6,9 +6,24 @@ using StaticArrays
 arrays = [Array]
 # CUDA.functional() && push!(arrays, CuArray)
 
-@testset "ForcePartition.jl" begin
-    # Write your tests here.
-    @test true
+# potential around a cylinder
+ϕ_cylinder(center,R) = (y-x.-center; r=√sum(abs2,y); θ=atan(y[2]/y[1]); ϕ = -R^3*cos(θ)/2r^2; return ϕ)
+
+# circle sim
+function circle(;L=32,m=10,Re=250,U=1,T=Float32,mem=Array)
+    # body
+    body = AutoBody((x,t)->√sum(abs2, x.-m/2*L)-L÷2)
+    # generate sim
+    Simulation((m*L,m*L), (U,0), L; ν=U*radius/Re, body, T, mem)
+end
+
+@testset "ForcePartitionMethod.jl" begin
+    #
+    sim = circle(L=32,T=Float32,mem=Array)
+    fpm = ForcePartitionMethod(sim)
+    potential!(fpm,fpm.body;tᵢ=0,axis=1)
+    R = inside(fpm.ϕ)
+    @test maximum(abs.(fpm.ϕ[R] .- ϕ_cylinder(SA[sim.L*sim.m/2,sim.L*sim.m/2],sim.L/2)[R])) < 1e-2
 end
 
 function parabolic_u(i,x,t,L)
